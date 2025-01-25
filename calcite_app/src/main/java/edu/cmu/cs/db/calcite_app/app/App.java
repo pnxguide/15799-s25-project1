@@ -6,13 +6,30 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.nio.file.Files;
+import java.nio.charset.Charset;
+
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelNode;
+
 import org.apache.calcite.sql.SqlExplainFormat;
 import org.apache.calcite.sql.SqlExplainLevel;
+import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.util.SqlString;
+import org.apache.calcite.sql.dialect.PostgresqlSqlDialect;
 
-public class App
-{
+public class App {
+    public static String getExtension(String fileName) {
+        String extension = "";
+
+        int i = fileName.lastIndexOf('.');
+        if (i > 0) {
+            extension = fileName.substring(i+1);
+        }
+
+        return extension;
+    }
+
     private static void SerializePlan(RelNode relNode, File outputPath) throws IOException {
         Files.writeString(outputPath.toPath(), RelOptUtil.dumpPlan("", relNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
     }
@@ -40,23 +57,28 @@ public class App
         Files.writeString(outputPath.toPath(), resultSetString.toString());
     }
 
-    public static void main(String[] args) throws Exception
-    {
-        if (args.length == 0) {
-            System.out.println("Usage: java -jar App.jar <arg1> <arg2>");
+    public static void optimize(String query, File outputDirectory, File statisticsFile) throws Exception {
+        String baseSQL = query;
+
+        SqlParser parser = SqlParser.create(baseSQL);
+        SqlNode parseTree = parser.parseQuery();
+
+        // TODO:
+
+        SqlString optimizedSQL = parseTree.toSqlString(PostgresqlSqlDialect.DEFAULT);
+        System.out.println(optimizedSQL);
+    }
+
+    public static void main(String[] args) throws Exception {
+        if (args.length != 3) {
+            System.out.println("Usage: java -jar App.jar <input_file> <output_dir> <statistics_file>");
             return;
         }
 
-        // Feel free to modify this to take as many or as few arguments as you want.
-        System.out.println("Running the app!");
-        String arg1 = args[0];
-        System.out.println("\tArg1: " + arg1);
-        String arg2 = args[1];
-        System.out.println("\tArg2: " + arg2);
-        
-        // Note: in practice, you would probably use org.apache.calcite.tools.Frameworks.
-        // That package provides simple defaults that make it easier to configure Calcite.
-        // But there's a lot of magic happening there; since this is an educational project,
-        // we guide you towards the explicit method in the writeup.
+        File inputFile = new File(args[0]);
+        File outputDirectory = new File(args[1]);
+        File statisticsFile = new File(args[2]);
+
+        optimize(Files.readString(inputFile.toPath(), Charset.defaultCharset()), outputDirectory, statisticsFile);
     }
 }

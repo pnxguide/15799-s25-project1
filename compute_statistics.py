@@ -1,0 +1,3 @@
+import duckdb
+
+print("stat")
