@@ -57,7 +57,6 @@ import org.apache.calcite.tools.RuleSet;
 import org.apache.calcite.tools.RuleSets;
 
 public class App {
-
     // Method getFileNameWithoutExtension
     // Code Reference: https://stackoverflow.com/questions/924394/how-to-get-the-filename-without-the-extension-in-java
     public static String getFileNameWithoutExtension(File file) {
@@ -99,143 +98,81 @@ public class App {
     public static void optimize(String query, File inputFile, File outputDirectory, File statisticsFile) throws Exception {
         String baseSql = query;
 
-        // Schema
-        // CalciteSchema rootSchema = CalciteSchema.createRootSchema(false, false);
-        Class.forName("org.apache.calcite.jdbc.Driver");
-        Properties info = new Properties();
-        info.setProperty("lex", "JAVA");
-        Connection connection =
-            DriverManager.getConnection("jdbc:calcite:", info);
-        CalciteConnection calciteConnection =
-            connection.unwrap(CalciteConnection.class);
-        SchemaPlus rootSchema = calciteConnection.getRootSchema();
+        Optimizer optimizer = Optimizer.getInstance();
+        RelNode validatedSqlNode = optimizer.parseAndValidate(baseSql);
+        System.out.println(validatedSqlNode);
 
-        DataSource dataSource = JdbcSchema.dataSource(
-                "jdbc:duckdb:/home/ubuntu/15799-s25-project1/stat.db", "org.duckdb.DuckDBDriver", null, null);
+        // VolcanoPlanner planner = new VolcanoPlanner(
+        //     RelOptCostImpl.FACTORY, 
+        //     Contexts.of(config)
+        // );
+        // planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
+        // // planner.addRelTraitDef(RelDistributionTraitDef.INSTANCE);
+        // // planner.addRule(CoreRules.FILTER_INTO_JOIN);
+        // // planner.addRule(EnumerableRules.ENUMERABLE_SORT_RULE);
+        // // planner.addRule(EnumerableRules.ENUMERABLE_VALUES_RULE);
+        // // planner.addRule(EnumerableRules.ENUMERABLE_PROJECT_RULE);
+        // // planner.addRule(EnumerableRules.ENUMERABLE_FILTER_RULE);
+        // // planner.addRule(EnumerableRules.ENUMERABLE_TABLE_SCAN_RULE);
 
-        Schema schema = JdbcSchema.create(rootSchema, "stat", dataSource, null, null);
-        rootSchema.add("stat", schema);
-
-        // ScannableTable
-
-        // Parse
-        JavaTypeFactoryImpl typeFactory = new JavaTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
-
-        Properties configProperties = new Properties();
-        configProperties.put(CalciteConnectionProperty.CASE_SENSITIVE.camelName(), Boolean.TRUE.toString());
-        configProperties.put(CalciteConnectionProperty.UNQUOTED_CASING.camelName(), Casing.UNCHANGED.toString());
-        configProperties.put(CalciteConnectionProperty.QUOTED_CASING.camelName(), Casing.UNCHANGED.toString());
-
-        CalciteConnectionConfig config = new CalciteConnectionConfigImpl(configProperties);
-
-        CatalogReader catalogReader = new CalciteCatalogReader(
-                rootSchema.unwrap(CalciteSchema.class),
-                Collections.singletonList("stat"),
-                typeFactory,
-                config
-        );
-
-        SqlValidator validator = SqlValidatorUtil.newValidator(
-                SqlStdOperatorTable.instance(),
-                catalogReader,
-                typeFactory,
-                SqlValidator.Config.DEFAULT
-        );
-
-        SqlParser parser = SqlParser.create(
-                baseSql,
-                SqlParser.config()
-                        .withCaseSensitive(config.caseSensitive())
-                        .withUnquotedCasing(config.unquotedCasing())
-                        .withQuotedCasing(config.quotedCasing())
-                        .withConformance(config.conformance())
-        );
-
-        SqlNode sqlNode = parser.parseStmt();
-        SqlNode validatedSqlNode = validator.validate(sqlNode);
-
-        VolcanoPlanner planner = new VolcanoPlanner(
-            RelOptCostImpl.FACTORY, 
-            Contexts.of(config)
-        );
-        planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
-        // planner.addRelTraitDef(RelDistributionTraitDef.INSTANCE);
-        // planner.addRule(CoreRules.FILTER_INTO_JOIN);
-        // planner.addRule(EnumerableRules.ENUMERABLE_SORT_RULE);
-        // planner.addRule(EnumerableRules.ENUMERABLE_VALUES_RULE);
-        // planner.addRule(EnumerableRules.ENUMERABLE_PROJECT_RULE);
-        // planner.addRule(EnumerableRules.ENUMERABLE_FILTER_RULE);
-        // planner.addRule(EnumerableRules.ENUMERABLE_TABLE_SCAN_RULE);
-
-        SqlToRelConverter sql2rel = new SqlToRelConverter(
-                null,
-                validator,
-                catalogReader,
-                RelOptCluster.create(planner, new RexBuilder(typeFactory)),
-                StandardConvertletTable.INSTANCE,
-                SqlToRelConverter.config()
-                        .withTrimUnusedFields(true)
-                        .withExpand(false)
-        );
-
-        RelNode relNode = sql2rel.convertQuery(validatedSqlNode, false, true).rel;
         
         
-        System.out.println(RelOptUtil.dumpPlan("unoptimized", relNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
         
-        // RelNode enumerableRelNode = planner.changeTraits(relNode, relNode.getCluster().traitSet().replace(EnumerableConvention.INSTANCE));
-        // planner.setRoot(enumerableRelNode);
-        // planner.setRoot(relNode);
-
-        RuleSet rules = RuleSets.ofList(
-            CoreRules.FILTER_TO_CALC,
-            CoreRules.PROJECT_TO_CALC,
-            CoreRules.FILTER_CALC_MERGE,
-            CoreRules.PROJECT_CALC_MERGE,
-            EnumerableRules.ENUMERABLE_TABLE_SCAN_RULE,
-            EnumerableRules.ENUMERABLE_PROJECT_RULE,
-            EnumerableRules.ENUMERABLE_FILTER_RULE,
-            EnumerableRules.ENUMERABLE_CALC_RULE,
-            EnumerableRules.ENUMERABLE_AGGREGATE_RULE
-        );
-
-        Program program = Programs.of(RuleSets.ofList(rules));
-        RelNode optimizedRelNode = program.run(
-            planner,
-            relNode,
-            relNode.getTraitSet().plus(EnumerableConvention.INSTANCE),
-            Collections.emptyList(),
-            Collections.emptyList()
-        );
+        // System.out.println(RelOptUtil.dumpPlan("unoptimized", relNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
         
-        System.out.println(RelOptUtil.dumpPlan("optimized", optimizedRelNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+        // // RelNode enumerableRelNode = planner.changeTraits(relNode, relNode.getCluster().traitSet().replace(EnumerableConvention.INSTANCE));
+        // // planner.setRoot(enumerableRelNode);
+        // // planner.setRoot(relNode);
 
-        // // Run optimized query
-        // RelRunner runner = connection.unwrap(RelRunner.class);
-        // PreparedStatement stmt = runner.prepareStatement(optimizedRelNode);
-        // ResultSet resultSet = stmt.executeQuery();
+        // RuleSet rules = RuleSets.ofList(
+        //     CoreRules.FILTER_TO_CALC,
+        //     CoreRules.PROJECT_TO_CALC,
+        //     CoreRules.FILTER_CALC_MERGE,
+        //     CoreRules.PROJECT_CALC_MERGE,
+        //     EnumerableRules.ENUMERABLE_TABLE_SCAN_RULE,
+        //     EnumerableRules.ENUMERABLE_PROJECT_RULE,
+        //     EnumerableRules.ENUMERABLE_FILTER_RULE,
+        //     EnumerableRules.ENUMERABLE_CALC_RULE,
+        //     EnumerableRules.ENUMERABLE_AGGREGATE_RULE
+        // );
 
-        // RelNode to SQL
-        RelToSqlConverter rel2sql = new RelToSqlConverter(PostgresqlSqlDialect.DEFAULT);
-        RelToSqlConverter.Result res = rel2sql.visitRoot(optimizedRelNode);
-        SqlNode optimizedSqlNode = res.asQueryOrValues();
-        SqlString optimizedSql = optimizedSqlNode.toSqlString(PostgresqlSqlDialect.DEFAULT);
-        System.out.println(optimizedSql);
+        // Program program = Programs.of(RuleSets.ofList(rules));
+        // RelNode optimizedRelNode = program.run(
+        //     planner,
+        //     relNode,
+        //     relNode.getTraitSet().plus(EnumerableConvention.INSTANCE),
+        //     Collections.emptyList(),
+        //     Collections.emptyList()
+        // );
+        
+        // System.out.println(RelOptUtil.dumpPlan("optimized", optimizedRelNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
 
-        // Output
-        String initialOutputFileName = outputDirectory.getAbsolutePath() + "/" + getFileNameWithoutExtension(inputFile);
-        System.out.println(initialOutputFileName);
+        // // // Run optimized query
+        // // RelRunner runner = connection.unwrap(RelRunner.class);
+        // // PreparedStatement stmt = runner.prepareStatement(optimizedRelNode);
+        // // ResultSet resultSet = stmt.executeQuery();
 
-        // 1. query.sql
-        SerializeSql(baseSql, new File(initialOutputFileName + ".sql"));
-        // 2. query.txt
-        SerializePlan(relNode, new File(initialOutputFileName + ".txt"));
-        // // 3. query_optimized.txt
-        // SerializePlan(optimizedRelNode, new File(initialOutputFileName + "_optimized.txt"));
-        // // 4. query_result.csv
-        // SerializeResultSet(resultSet, new File(initialOutputFileName + "_result.csv"));
-        // 5. query_optimized.sql
-        SerializeSql(optimizedSql.toString(), new File(initialOutputFileName + "_optimized.sql"));
+        // // RelNode to SQL
+        // RelToSqlConverter rel2sql = new RelToSqlConverter(PostgresqlSqlDialect.DEFAULT);
+        // RelToSqlConverter.Result res = rel2sql.visitRoot(optimizedRelNode);
+        // SqlNode optimizedSqlNode = res.asQueryOrValues();
+        // SqlString optimizedSql = optimizedSqlNode.toSqlString(PostgresqlSqlDialect.DEFAULT);
+        // System.out.println(optimizedSql);
+
+        // // Output
+        // String initialOutputFileName = outputDirectory.getAbsolutePath() + "/" + getFileNameWithoutExtension(inputFile);
+        // System.out.println(initialOutputFileName);
+
+        // // 1. query.sql
+        // SerializeSql(baseSql, new File(initialOutputFileName + ".sql"));
+        // // 2. query.txt
+        // SerializePlan(relNode, new File(initialOutputFileName + ".txt"));
+        // // // 3. query_optimized.txt
+        // // SerializePlan(optimizedRelNode, new File(initialOutputFileName + "_optimized.txt"));
+        // // // 4. query_result.csv
+        // // SerializeResultSet(resultSet, new File(initialOutputFileName + "_result.csv"));
+        // // 5. query_optimized.sql
+        // SerializeSql(optimizedSql.toString(), new File(initialOutputFileName + "_optimized.sql"));
     }
 
     public static void main(String[] args) throws Exception {
