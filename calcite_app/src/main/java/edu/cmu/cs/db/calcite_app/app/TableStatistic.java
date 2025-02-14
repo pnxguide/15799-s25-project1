@@ -2,11 +2,11 @@ package edu.cmu.cs.db.calcite_app.app;
 
 import org.apache.calcite.schema.Statistic;
 
-public class SimpleTableStatistic implements Statistic {
+public class TableStatistic implements Statistic {
 
     private final long rowCount;
     
-    public SimpleTableStatistic(long rowCount) {
+    public TableStatistic(long rowCount) {
         this.rowCount = rowCount;
     }
     

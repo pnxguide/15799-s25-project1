@@ -16,20 +16,20 @@ import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 
-public class SimpleTable extends AbstractTable implements ScannableTable {
+public class CustomTable extends AbstractTable implements ScannableTable {
 
     private final String tableName;
     private final List<String> fieldNames;
     private final List<SqlTypeName> fieldTypes;
-    private final SimpleTableStatistic statistic;
+    private final TableStatistic statistic;
 
     private RelDataType rowType;
 
-    private SimpleTable(
+    public CustomTable(
         String tableName, 
         List<String> fieldNames, 
         List<SqlTypeName> fieldTypes, 
-        SimpleTableStatistic statistic
+        TableStatistic statistic
     ) {
         this.tableName = tableName;
         this.fieldNames = fieldNames;
@@ -56,7 +56,7 @@ public class SimpleTable extends AbstractTable implements ScannableTable {
 
     @Override
     public Enumerable<Object[]> scan(DataContext root) {
-        throw new UnsupportedOperationException("Not implemented");
+        return null;
     }
 
     @Override

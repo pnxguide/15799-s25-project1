@@ -67,7 +67,7 @@ public class App {
         RelNode optimizedSqlNode = optimizer.optimize(validatedSqlNode);
         System.out.println(RelOptUtil.dumpPlan("", optimizedSqlNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
 
-        optimizer.execute(optimizedSqlNode);
+        // optimizer.execute(optimizedSqlNode);
     }
 
     public static void main(String[] args) throws Exception {

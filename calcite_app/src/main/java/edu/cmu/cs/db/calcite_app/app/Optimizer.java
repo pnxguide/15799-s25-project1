@@ -4,31 +4,34 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Properties;
 
 import javax.sql.DataSource;
 
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
+import org.apache.calcite.adapter.enumerable.EnumerableRel;
 import org.apache.calcite.adapter.enumerable.EnumerableRules;
-import static org.apache.calcite.adapter.enumerable.EnumerableRules.ENUMERABLE_AGGREGATE_RULE;
 import org.apache.calcite.adapter.jdbc.JdbcSchema;
+import org.apache.calcite.adapter.jdbc.JdbcTable;
 import org.apache.calcite.avatica.util.Casing;
 import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.config.CalciteConnectionConfigImpl;
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
-import org.apache.calcite.plan.Contexts;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.plan.RelOptCostImpl;
 import org.apache.calcite.plan.RelOptPlanner;
+import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.prepare.Prepare.CatalogReader;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.rules.CoreRules;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.schema.Schema;
@@ -36,24 +39,23 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
 import org.apache.calcite.sql2rel.StandardConvertletTable;
-import org.apache.calcite.tools.Program;
-import org.apache.calcite.tools.Programs;
 import org.apache.calcite.tools.RelRunner;
-import org.apache.calcite.tools.RuleSet;
-import org.apache.calcite.tools.RuleSets;
 
 public class Optimizer {
 
     private final CalciteSchema rootSchema;
     private final DataSource jdbcDataSource;
-    private final RelOptPlanner planner;
+    private final RelOptCluster cluster;
     private final CalciteConnectionConfig config;
+    private final RelDataTypeFactory typeFactory;
 
     private static Optimizer INSTANCE;
+    private static final RelOptTable.ViewExpander NOOP_EXPANDER = (type, query, schema, path) -> null;
 
     public static Optimizer getInstance() {
         if (INSTANCE == null) {
@@ -63,13 +65,23 @@ public class Optimizer {
     }
 
     private Optimizer() {
-        this.rootSchema = CalciteSchema.createRootSchema(false, false);
-
+        this.rootSchema = CalciteSchema.createRootSchema(false);
+        this.typeFactory = new JavaTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
+    
+        // Discovering the schema
         this.jdbcDataSource = JdbcSchema.dataSource(
                 "jdbc:duckdb:/home/pnx/15799-s25-project1/stat.db", "org.duckdb.DuckDBDriver", null, null);
-
         Schema schema = JdbcSchema.create(this.rootSchema.plus(), "stat", this.jdbcDataSource, null, null);
-        this.rootSchema.add("stat", schema);
+        for (String tableName : schema.getTableNames()) {
+            JdbcTable table = (JdbcTable)schema.getTable(tableName);
+            List<String> fieldNames = new ArrayList<>();
+            List<SqlTypeName> fieldTypes = new ArrayList<>();
+            for (RelDataTypeField column : table.getRowType(typeFactory).getFieldList()) {
+                fieldNames.add(column.getName());
+                fieldTypes.add(column.getType().getSqlTypeName());
+            }
+            this.rootSchema.add(tableName, new CustomTable(tableName, fieldNames, fieldTypes, new TableStatistic(100)));
+        }
 
         Properties configProperties = new Properties();
         configProperties.put(CalciteConnectionProperty.CASE_SENSITIVE.camelName(), Boolean.TRUE.toString());
@@ -78,11 +90,9 @@ public class Optimizer {
 
         this.config = new CalciteConnectionConfigImpl(configProperties);
 
-        this.planner = new VolcanoPlanner(
-                RelOptCostImpl.FACTORY,
-                Contexts.of(this.config)
-        );
+        RelOptPlanner planner = new VolcanoPlanner();
         planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
+        this.cluster = RelOptCluster.create(planner, new RexBuilder(this.typeFactory));
     }
 
     public void execute(RelNode relNode) throws SQLException, ClassNotFoundException {
@@ -95,44 +105,37 @@ public class Optimizer {
         System.out.println(resultSet);
     }
 
-    public RelNode optimize(RelNode relNode) {
-        RuleSet rules;
-        rules = RuleSets.ofList(CoreRules.FILTER_TO_CALC,
-                CoreRules.PROJECT_TO_CALC,
-                CoreRules.FILTER_CALC_MERGE,
-                CoreRules.PROJECT_CALC_MERGE,
-                EnumerableRules.ENUMERABLE_TABLE_SCAN_RULE,
-                EnumerableRules.ENUMERABLE_PROJECT_RULE,
-                EnumerableRules.ENUMERABLE_FILTER_RULE,
-                EnumerableRules.ENUMERABLE_CALC_RULE, ENUMERABLE_AGGREGATE_RULE);
+    public EnumerableRel optimize(RelNode relNode) {
+        RelOptPlanner planner = this.cluster.getPlanner();
+        planner.addRule(EnumerableRules.ENUMERABLE_JOIN_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_SORT_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_LIMIT_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_AGGREGATE_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_PROJECT_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_FILTER_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_TABLE_SCAN_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_LIMIT_RULE);
 
-        Program program = Programs.of(RuleSets.ofList(rules));
-        RelNode optimizedRelNode;
-        optimizedRelNode = program.run(
-                this.planner,
-                relNode,
-                relNode.getTraitSet().plus(EnumerableConvention.INSTANCE),
-                Collections.emptyList(),
-                Collections.emptyList()
-        );
+        RelNode newRoot = planner.changeTraits(relNode, relNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
+        planner.setRoot(newRoot);
 
-        return optimizedRelNode;
+        EnumerableRel optimizedNode = (EnumerableRel) planner.findBestExp();
+
+        return optimizedNode;
     }
 
     public RelNode parseAndValidate(String baseSql) throws SqlParseException {
-        JavaTypeFactoryImpl typeFactory = new JavaTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
-
         CatalogReader catalogReader = new CalciteCatalogReader(
                 this.rootSchema,
                 Collections.singletonList("stat"),
-                typeFactory,
+                this.typeFactory,
                 config
         );
 
         SqlValidator validator = SqlValidatorUtil.newValidator(
                 SqlStdOperatorTable.instance(),
                 catalogReader,
-                typeFactory,
+                this.typeFactory,
                 SqlValidator.Config.DEFAULT
         );
 
@@ -149,10 +152,10 @@ public class Optimizer {
         SqlNode validatedSqlNode = validator.validate(sqlNode);
 
         SqlToRelConverter sql2rel = new SqlToRelConverter(
-                null,
+                NOOP_EXPANDER,
                 validator,
                 catalogReader,
-                RelOptCluster.create(this.planner, new RexBuilder(typeFactory)),
+                this.cluster,
                 StandardConvertletTable.INSTANCE,
                 SqlToRelConverter.config()
                         .withTrimUnusedFields(true)
