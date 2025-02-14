@@ -85,8 +85,8 @@ public class Optimizer {
         planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
     }
 
-    public void execute(RelNode relNode) throws SQLException {
-        Connection connection = this.jdbcDataSource.createConnectionBuilder().build();
+    public void execute(RelNode relNode) throws SQLException, ClassNotFoundException {
+        Connection connection = this.jdbcDataSource.getConnection();
         RelRunner runner = connection.unwrap(RelRunner.class);
 
         PreparedStatement statement = runner.prepareStatement(relNode);
