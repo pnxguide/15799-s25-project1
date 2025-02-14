@@ -4,9 +4,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Properties;
 
 import javax.sql.DataSource;
@@ -15,12 +13,11 @@ import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.adapter.enumerable.EnumerableRel;
 import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.adapter.jdbc.JdbcSchema;
-import org.apache.calcite.adapter.jdbc.JdbcTable;
 import org.apache.calcite.avatica.util.Casing;
-import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.config.CalciteConnectionConfigImpl;
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.calcite.jdbc.CalciteSchema;
+import static org.apache.calcite.jdbc.CalciteSchema.createRootSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
@@ -31,15 +28,14 @@ import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.prepare.Prepare.CatalogReader;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
-import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.schema.Schema;
+import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
-import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
@@ -51,7 +47,6 @@ public class Optimizer {
     private final CalciteSchema rootSchema;
     private final DataSource jdbcDataSource;
     private final RelOptCluster cluster;
-    private final CalciteConnectionConfig config;
     private final RelDataTypeFactory typeFactory;
 
     private static Optimizer INSTANCE;
@@ -65,31 +60,19 @@ public class Optimizer {
     }
 
     private Optimizer() {
-        this.rootSchema = CalciteSchema.createRootSchema(false);
+        this.rootSchema = createRootSchema(false);
         this.typeFactory = new JavaTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
     
-        // Discovering the schema
+        // Discovering schema
         this.jdbcDataSource = JdbcSchema.dataSource(
                 "jdbc:duckdb:/home/pnx/15799-s25-project1/stat.db", "org.duckdb.DuckDBDriver", null, null);
         Schema schema = JdbcSchema.create(this.rootSchema.plus(), "stat", this.jdbcDataSource, null, null);
         for (String tableName : schema.getTableNames()) {
-            JdbcTable table = (JdbcTable)schema.getTable(tableName);
-            List<String> fieldNames = new ArrayList<>();
-            List<SqlTypeName> fieldTypes = new ArrayList<>();
-            for (RelDataTypeField column : table.getRowType(typeFactory).getFieldList()) {
-                fieldNames.add(column.getName());
-                fieldTypes.add(column.getType().getSqlTypeName());
-            }
-            this.rootSchema.add(tableName, new CustomTable(tableName, fieldNames, fieldTypes, new TableStatistic(100)));
+            Table table = schema.getTable(tableName);
+            this.rootSchema.add(tableName, new CustomTable(table, new TableStatistic(100)));
         }
 
-        Properties configProperties = new Properties();
-        configProperties.put(CalciteConnectionProperty.CASE_SENSITIVE.camelName(), Boolean.TRUE.toString());
-        configProperties.put(CalciteConnectionProperty.UNQUOTED_CASING.camelName(), Casing.UNCHANGED.toString());
-        configProperties.put(CalciteConnectionProperty.QUOTED_CASING.camelName(), Casing.UNCHANGED.toString());
-
-        this.config = new CalciteConnectionConfigImpl(configProperties);
-
+        // Initialize planner and cluster
         RelOptPlanner planner = new VolcanoPlanner();
         planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
         this.cluster = RelOptCluster.create(planner, new RexBuilder(this.typeFactory));
@@ -125,6 +108,14 @@ public class Optimizer {
     }
 
     public RelNode parseAndValidate(String baseSql) throws SqlParseException {
+        // Initialize config
+        Properties configProperties = new Properties();
+        configProperties.put(CalciteConnectionProperty.CASE_SENSITIVE.camelName(), Boolean.TRUE.toString());
+        configProperties.put(CalciteConnectionProperty.UNQUOTED_CASING.camelName(), Casing.UNCHANGED.toString());
+        configProperties.put(CalciteConnectionProperty.QUOTED_CASING.camelName(), Casing.UNCHANGED.toString());
+
+        CalciteConnectionConfigImpl config = new CalciteConnectionConfigImpl(configProperties);
+
         CatalogReader catalogReader = new CalciteCatalogReader(
                 this.rootSchema,
                 Collections.singletonList("stat"),
