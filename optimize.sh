@@ -20,12 +20,12 @@ rm -rf stat.db;
 
 # Replace file
 mkdir -p tpch/;
-cp ./input/data/*.parquet ./tpch/;
-cp ./input/data/*.parquet ./tpch/;
 
 # Load data into stat.db
-./duckdb stat.db -c ".read ./input/data/schema.sql";
-./duckdb stat.db -c ".read ./input/data/load.sql";
+cd input;
+../duckdb ../stat.db -c ".read ./data/schema.sql";
+../duckdb ../stat.db -c ".read ./data/load.sql";
+cd ..;
 
 # Analyze statistics from the database
 sudo apt -y install python3-pip;

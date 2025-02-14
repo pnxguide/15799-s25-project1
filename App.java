@@ -111,7 +111,7 @@ public class App {
         SchemaPlus rootSchema = calciteConnection.getRootSchema();
 
         DataSource dataSource = JdbcSchema.dataSource(
-                "jdbc:duckdb:/home/ubuntu/15799-s25-project1/stat.db", "org.duckdb.DuckDBDriver", null, null);
+                "jdbc:duckdb:/home/pnx/15799-s25-project1/stat.db", "org.duckdb.DuckDBDriver", null, null);
 
         Schema schema = JdbcSchema.create(rootSchema, "stat", dataSource, null, null);
         rootSchema.add("stat", schema);

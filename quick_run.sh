@@ -12,5 +12,3 @@ java -Xmx4096m -jar build/libs/calcite_app-1.0-SNAPSHOT-all.jar \
     "../input/queries/q3.sql" \
     "../output" \
     "../input/statistics.csv";
-
-cd -
