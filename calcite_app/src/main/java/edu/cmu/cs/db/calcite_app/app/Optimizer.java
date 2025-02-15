@@ -24,15 +24,19 @@ import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.prepare.Prepare.CatalogReader;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.rel2sql.RelToSqlConverter;
+import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.dialect.PostgresqlSqlDialect;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.util.SqlString;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
@@ -83,6 +87,7 @@ public class Optimizer {
 
     public EnumerableRel optimize(RelNode relNode) {
         RelOptPlanner planner = this.cluster.getPlanner();
+        planner.addRule(CoreRules.FILTER_INTO_JOIN);
         planner.addRule(EnumerableRules.ENUMERABLE_JOIN_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_SORT_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_LIMIT_RULE);
@@ -149,5 +154,13 @@ public class Optimizer {
         RelNode relNode = sql2rel.convertQuery(validatedSqlNode, false, true).rel;
 
         return relNode;
+    }
+
+    public SqlString relNodeToSqlString(RelNode relNode) {
+        RelToSqlConverter rel2sql = new RelToSqlConverter(PostgresqlSqlDialect.DEFAULT);
+        RelToSqlConverter.Result res = rel2sql.visitRoot(relNode);
+        SqlNode optimizedSqlNode = res.asQueryOrValues();
+        SqlString optimizedSql = optimizedSqlNode.toSqlString(PostgresqlSqlDialect.DEFAULT);
+        return optimizedSql;
     }
 }

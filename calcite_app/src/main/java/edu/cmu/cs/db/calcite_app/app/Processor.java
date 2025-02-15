@@ -45,13 +45,10 @@ public class Processor {
                 = connection.unwrap(CalciteConnection.class);
     }
 
-    public void execute(RelNode relNode) throws SQLException {
+    public ResultSet execute(RelNode relNode) throws SQLException {
         RelRunner runner = this.calciteConnection.unwrap(RelRunner.class);
         PreparedStatement statement = runner.prepareStatement(relNode);
         ResultSet resultSet = statement.executeQuery();
-        while (resultSet.next()) {
-            System.out.println(resultSet);
-        }
-        System.out.println("executed");
+        return resultSet;
     }
 }

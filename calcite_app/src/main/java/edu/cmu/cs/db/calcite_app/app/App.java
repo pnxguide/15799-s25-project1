@@ -13,6 +13,7 @@ import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.sql.SqlExplainFormat;
 import org.apache.calcite.sql.SqlExplainLevel;
+import org.apache.calcite.sql.util.SqlString;
 
 public class App {
     // Method getFileNameWithoutExtension
@@ -65,11 +66,25 @@ public class App {
         Optimizer optimizer = Optimizer.getInstance();
         RelNode validatedSqlNode = optimizer.parseAndValidate(baseSql);
         RelNode optimizedSqlNode = optimizer.optimize(validatedSqlNode);
+        SqlString optimizedSql = optimizer.relNodeToSqlString(optimizedSqlNode);
         System.out.println(RelOptUtil.dumpPlan("", optimizedSqlNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
 
         Processor processor = Processor.getInstance();
         processor.setSchema(optimizer.getSchema());
-        processor.execute(optimizedSqlNode);
+        ResultSet resultSet = processor.execute(optimizedSqlNode);
+
+        String initialOutputFileName = outputDirectory.getAbsolutePath() + "/" + getFileNameWithoutExtension(inputFile);
+
+        // 1. query.sql
+        SerializeSql(baseSql, new File(initialOutputFileName + ".sql"));
+        // 2. query.txt
+        SerializePlan(validatedSqlNode, new File(initialOutputFileName + ".txt"));
+        // 3. query_optimized.txt
+        SerializePlan(optimizedSqlNode, new File(initialOutputFileName + "_optimized.txt"));
+        // 4. query_result.csv
+        SerializeResultSet(resultSet, new File(initialOutputFileName + "_result.csv"));
+        // 5. query_optimized.sql
+        SerializeSql(optimizedSql.toString(), new File(initialOutputFileName + "_optimized.sql"));
     }
 
     public static void main(String[] args) throws Exception {

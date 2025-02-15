@@ -19,6 +19,13 @@ public class CustomEnumerable extends AbstractEnumerable<Object[]> {
     
     @Override
     public Enumerator<Object[]> enumerator() {
+        try {
+            Database db = Database.getInstance();
+            return Linq4j.enumerator(db.getTable(this.tableName));
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+        
         return Linq4j.enumerator(Collections.EMPTY_LIST);
     }
 }
