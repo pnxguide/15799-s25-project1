@@ -32,13 +32,13 @@ cd ..;
 # pip3 install duckdb;
 # python3 compute_statistics.py > ./input/statistics.csv;
 
+DUCKDB_PATH=$(realpath stat.db);
+
 # Build and run the Calcite app.
 cd calcite_app/
 ./gradlew build
 ./gradlew shadowJar
 ./gradlew --stop
-
-DUCKDB_PATH=$(realpath stat.db);
 
 for file in ../input/queries/*.sql
 do
@@ -50,4 +50,3 @@ do
 done
 
 cd -;
-
