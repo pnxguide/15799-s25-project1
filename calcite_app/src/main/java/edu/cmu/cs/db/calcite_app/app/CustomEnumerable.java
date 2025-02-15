@@ -1,5 +1,6 @@
 package edu.cmu.cs.db.calcite_app.app;
 
+import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
@@ -22,7 +23,7 @@ public class CustomEnumerable extends AbstractEnumerable<Object[]> {
         try {
             Database db = Database.getInstance();
             return Linq4j.enumerator(db.getTable(this.tableName));
-        } catch (Exception e) {
+        } catch (ClassNotFoundException | SQLException e) {
             System.out.println(e);
         }
         

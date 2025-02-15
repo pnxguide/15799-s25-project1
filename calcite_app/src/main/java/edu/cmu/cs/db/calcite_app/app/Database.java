@@ -1,5 +1,6 @@
 package edu.cmu.cs.db.calcite_app.app;
 
+import java.io.File;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -36,7 +37,7 @@ public class Database {
         return this.tables.get(tableName);
     }
 
-    public void loadData(Schema schema) throws SQLException {
+    public void loadData(Schema schema, File duckDbFile) throws SQLException {
         Set<String> tableNames = schema.getTableNames();
 
         try {
@@ -46,7 +47,7 @@ public class Database {
         }
 
         try {
-            Connection connection = DriverManager.getConnection("jdbc:duckdb:/home/pnx/15799-s25-project1/stat.db");
+            Connection connection = DriverManager.getConnection("jdbc:duckdb:" + duckDbFile.getPath());
             
             for (String tableName : tableNames) {
                 List<Object[]> enumerableList = new ArrayList<>();

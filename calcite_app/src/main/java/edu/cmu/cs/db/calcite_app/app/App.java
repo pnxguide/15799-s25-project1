@@ -16,8 +16,6 @@ import org.apache.calcite.sql.SqlExplainLevel;
 import org.apache.calcite.sql.util.SqlString;
 
 public class App {
-    // Method getFileNameWithoutExtension
-    // Code Reference: https://stackoverflow.com/questions/924394/how-to-get-the-filename-without-the-extension-in-java
     public static String getFileNameWithoutExtension(File file) {
         final Pattern ext = Pattern.compile("(?<=.)\\.[^.]+$");
         return ext.matcher(file.getName()).replaceAll("");
@@ -60,35 +58,39 @@ public class App {
         Files.writeString(outputPath.toPath(), resultSetString.toString());
     }
 
-    public static void process(String query, File inputFile, File outputDirectory, File statisticsFile) throws Exception {
+    public static void process(String query, File inputFile, File outputDirectory, File statisticsFile, File duckDbFile) throws Exception {
+        String initialOutputFileName = outputDirectory.getAbsolutePath() + "/" + getFileNameWithoutExtension(inputFile);
+        
         String baseSql = query;
+        SerializeSql(baseSql, new File(initialOutputFileName + ".sql"));
 
         Optimizer optimizer = Optimizer.getInstance();
+        optimizer.initialize(duckDbFile);
+
         RelNode validatedSqlNode = optimizer.parseAndValidate(baseSql);
+        SerializePlan(validatedSqlNode, new File(initialOutputFileName + ".txt"));
+
         RelNode optimizedSqlNode = optimizer.optimize(validatedSqlNode);
+        SerializePlan(optimizedSqlNode, new File(initialOutputFileName + "_optimized.txt"));
+        
         SqlString optimizedSql = optimizer.relNodeToSqlString(optimizedSqlNode);
+        SerializeSql(optimizedSql.toString(), new File(initialOutputFileName + "_optimized.sql"));
         System.out.println(RelOptUtil.dumpPlan("", optimizedSqlNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
 
         Processor processor = Processor.getInstance();
+
         processor.setSchema(optimizer.getSchema());
-        ResultSet resultSet = processor.execute(optimizedSqlNode);
 
-        String initialOutputFileName = outputDirectory.getAbsolutePath() + "/" + getFileNameWithoutExtension(inputFile);
-
-        // 1. query.sql
-        SerializeSql(baseSql, new File(initialOutputFileName + ".sql"));
-        // 2. query.txt
-        SerializePlan(validatedSqlNode, new File(initialOutputFileName + ".txt"));
-        // 3. query_optimized.txt
-        SerializePlan(optimizedSqlNode, new File(initialOutputFileName + "_optimized.txt"));
-        // 4. query_result.csv
-        SerializeResultSet(resultSet, new File(initialOutputFileName + "_result.csv"));
-        // 5. query_optimized.sql
-        SerializeSql(optimizedSql.toString(), new File(initialOutputFileName + "_optimized.sql"));
+        try {
+            ResultSet resultSet = processor.execute(optimizedSqlNode);
+            SerializeResultSet(resultSet, new File(initialOutputFileName + "_result.csv"));
+        } catch (SQLException e) {
+            System.out.println(e);
+        }
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 3) {
+        if (args.length != 4) {
             System.out.println("Usage: java -jar App.jar <input_file> <output_dir> <statistics_file>");
             return;
         }
@@ -96,7 +98,8 @@ public class App {
         File inputFile = new File(args[0]);
         File outputDirectory = new File(args[1]);
         File statisticsFile = new File(args[2]);
+        File duckDbFile = new File(args[3]);
 
-        process(Files.readString(inputFile.toPath(), Charset.defaultCharset()), inputFile, outputDirectory, statisticsFile);
+        process(Files.readString(inputFile.toPath(), Charset.defaultCharset()), inputFile, outputDirectory, statisticsFile, duckDbFile);
     }
 }

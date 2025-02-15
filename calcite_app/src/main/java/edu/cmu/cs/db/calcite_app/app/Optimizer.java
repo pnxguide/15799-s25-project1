@@ -1,5 +1,6 @@
 package edu.cmu.cs.db.calcite_app.app;
 
+import java.io.File;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Properties;
@@ -45,8 +46,8 @@ import org.apache.calcite.sql2rel.StandardConvertletTable;
 public class Optimizer {
 
     private final CalciteSchema rootSchema;
-    private final RelOptCluster cluster;
     private final RelDataTypeFactory typeFactory;
+    private RelOptCluster cluster;
 
     private static Optimizer INSTANCE;
     private static final RelOptTable.ViewExpander NOOP_EXPANDER = (type, query, schema, path) -> null;
@@ -65,15 +66,19 @@ public class Optimizer {
     private Optimizer() throws SQLException, ClassNotFoundException {
         this.rootSchema = createRootSchema(false);
         this.typeFactory = new JavaTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
-    
+    }
+
+    public void initialize(File duckDbFile) throws SQLException, ClassNotFoundException {
         // Discovering schema
         DataSource jdbcDataSource = JdbcSchema.dataSource(
-                "jdbc:duckdb:/home/pnx/15799-s25-project1/stat.db", "org.duckdb.DuckDBDriver", null, null);
+                "jdbc:duckdb:" + duckDbFile.getPath(), "org.duckdb.DuckDBDriver", null, null);
         Schema schema = JdbcSchema.create(this.rootSchema.plus(), "stat", jdbcDataSource, null, null);
 
+        // 
         Database db = Database.getInstance();
-        db.loadData(schema);
+        db.loadData(schema, duckDbFile);
 
+        // 
         for (String tableName : schema.getTableNames()) {
             Table table = schema.getTable(tableName);
             this.rootSchema.add(tableName, new CustomTable(table, new TableStatistic(db.getTable(tableName).size()), tableName));
@@ -88,14 +93,18 @@ public class Optimizer {
     public EnumerableRel optimize(RelNode relNode) {
         RelOptPlanner planner = this.cluster.getPlanner();
         planner.addRule(CoreRules.FILTER_INTO_JOIN);
+        planner.addRule(CoreRules.FILTER_REDUCE_EXPRESSIONS);
+        planner.addRule(CoreRules.AGGREGATE_EXPAND_DISTINCT_AGGREGATES);
+        planner.addRule(CoreRules.AGGREGATE_REDUCE_FUNCTIONS);
         planner.addRule(EnumerableRules.ENUMERABLE_JOIN_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_SORT_RULE);
-        planner.addRule(EnumerableRules.ENUMERABLE_LIMIT_RULE);
-        planner.addRule(EnumerableRules.ENUMERABLE_AGGREGATE_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_LIMIT_SORT_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_PROJECT_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_FILTER_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_VALUES_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_TABLE_SCAN_RULE);
-        planner.addRule(EnumerableRules.ENUMERABLE_LIMIT_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_AGGREGATE_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_CORRELATE_RULE);
 
         RelNode newRoot = planner.changeTraits(relNode, relNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
         planner.setRoot(newRoot);
@@ -148,7 +157,7 @@ public class Optimizer {
                 StandardConvertletTable.INSTANCE,
                 SqlToRelConverter.config()
                         .withTrimUnusedFields(true)
-                        .withExpand(false)
+                        .withExpand(true)
         );
 
         RelNode relNode = sql2rel.convertQuery(validatedSqlNode, false, true).rel;
