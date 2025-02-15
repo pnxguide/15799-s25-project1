@@ -1,9 +1,5 @@
 package edu.cmu.cs.db.calcite_app.app;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Properties;
 
@@ -40,12 +36,10 @@ import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
 import org.apache.calcite.sql2rel.StandardConvertletTable;
-import org.apache.calcite.tools.RelRunner;
 
 public class Optimizer {
 
     private final CalciteSchema rootSchema;
-    private final DataSource jdbcDataSource;
     private final RelOptCluster cluster;
     private final RelDataTypeFactory typeFactory;
 
@@ -59,33 +53,27 @@ public class Optimizer {
         return INSTANCE;
     }
 
+    public CalciteSchema getSchema() {
+        return this.rootSchema;
+    }
+
     private Optimizer() {
         this.rootSchema = createRootSchema(false);
         this.typeFactory = new JavaTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
     
         // Discovering schema
-        this.jdbcDataSource = JdbcSchema.dataSource(
+        DataSource jdbcDataSource = JdbcSchema.dataSource(
                 "jdbc:duckdb:/home/pnx/15799-s25-project1/stat.db", "org.duckdb.DuckDBDriver", null, null);
-        Schema schema = JdbcSchema.create(this.rootSchema.plus(), "stat", this.jdbcDataSource, null, null);
+        Schema schema = JdbcSchema.create(this.rootSchema.plus(), "stat", jdbcDataSource, null, null);
         for (String tableName : schema.getTableNames()) {
             Table table = schema.getTable(tableName);
-            this.rootSchema.add(tableName, new CustomTable(table, new TableStatistic(100)));
+            this.rootSchema.add(tableName, new CustomTable(table, new TableStatistic(100), tableName));
         }
 
         // Initialize planner and cluster
         RelOptPlanner planner = new VolcanoPlanner();
         planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
         this.cluster = RelOptCluster.create(planner, new RexBuilder(this.typeFactory));
-    }
-
-    public void execute(RelNode relNode) throws SQLException, ClassNotFoundException {
-        Connection connection = this.jdbcDataSource.getConnection();
-        RelRunner runner = connection.unwrap(RelRunner.class);
-
-        PreparedStatement statement = runner.prepareStatement(relNode);
-        ResultSet resultSet = statement.executeQuery();
-
-        System.out.println(resultSet);
     }
 
     public EnumerableRel optimize(RelNode relNode) {

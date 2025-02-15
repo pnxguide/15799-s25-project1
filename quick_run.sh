@@ -9,6 +9,6 @@ cd calcite_app/
 ./gradlew --stop
 
 java -Xmx4096m -jar build/libs/calcite_app-1.0-SNAPSHOT-all.jar \
-    "../input/queries/capybara2.sql" \
+    "../input/queries/simple.sql" \
     "../output" \
     "../input/statistics.csv";
