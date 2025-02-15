@@ -39,6 +39,7 @@ public class CustomTable extends AbstractTable implements ScannableTable {
 
     @Override
     public Enumerable<Object[]> scan(DataContext root) {
+        System.out.println("scan");
         return new CustomEnumerable(tableName, this.fields);
     }
 

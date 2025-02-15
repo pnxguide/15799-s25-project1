@@ -1,5 +1,6 @@
 package edu.cmu.cs.db.calcite_app.app;
 
+import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Properties;
 
@@ -46,7 +47,7 @@ public class Optimizer {
     private static Optimizer INSTANCE;
     private static final RelOptTable.ViewExpander NOOP_EXPANDER = (type, query, schema, path) -> null;
 
-    public static Optimizer getInstance() {
+    public static Optimizer getInstance() throws SQLException, ClassNotFoundException {
         if (INSTANCE == null) {
             INSTANCE = new Optimizer();
         }
@@ -57,7 +58,7 @@ public class Optimizer {
         return this.rootSchema;
     }
 
-    private Optimizer() {
+    private Optimizer() throws SQLException, ClassNotFoundException {
         this.rootSchema = createRootSchema(false);
         this.typeFactory = new JavaTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
     
@@ -65,9 +66,13 @@ public class Optimizer {
         DataSource jdbcDataSource = JdbcSchema.dataSource(
                 "jdbc:duckdb:/home/pnx/15799-s25-project1/stat.db", "org.duckdb.DuckDBDriver", null, null);
         Schema schema = JdbcSchema.create(this.rootSchema.plus(), "stat", jdbcDataSource, null, null);
+
+        Database db = Database.getInstance();
+        db.loadData(schema);
+
         for (String tableName : schema.getTableNames()) {
             Table table = schema.getTable(tableName);
-            this.rootSchema.add(tableName, new CustomTable(table, new TableStatistic(100), tableName));
+            this.rootSchema.add(tableName, new CustomTable(table, new TableStatistic(db.getTable(tableName).size()), tableName));
         }
 
         // Initialize planner and cluster

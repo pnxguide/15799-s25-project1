@@ -1,11 +1,5 @@
 package edu.cmu.cs.db.calcite_app.app;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -25,32 +19,6 @@ public class CustomEnumerable extends AbstractEnumerable<Object[]> {
     
     @Override
     public Enumerator<Object[]> enumerator() {
-        try {
-            Class.forName("org.duckdb.DuckDBDriver");
-        } catch (ClassNotFoundException ex) {
-            System.out.println(ex);
-            return Linq4j.enumerator(Collections.EMPTY_LIST); 
-        }
-
-        List<Object[]> enumerableList = new ArrayList<>();
-
-        try {
-            Connection connection = DriverManager.getConnection("jdbc:duckdb:/home/pnx/15799-s25-project1/stat.db");
-            Statement statement = connection.createStatement();
-            ResultSet resultSet = statement.executeQuery("SELECT * FROM " + this.tableName);
-            while (resultSet.next()) {
-                Object[] row = new Object[this.fields.size()];
-                for (int i = 0; i < row.length; i++) {
-                    String fieldName = this.fields.get(i).getName();
-                    row[i] = resultSet.getObject(fieldName);
-                }
-                enumerableList.add(row);
-            }
-        } catch (SQLException e) {
-            System.out.println(e);
-            return Linq4j.enumerator(Collections.EMPTY_LIST); 
-        }
-
-        return Linq4j.enumerator(enumerableList);
+        return Linq4j.enumerator(Collections.EMPTY_LIST);
     }
 }

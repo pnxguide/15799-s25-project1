@@ -16,7 +16,7 @@ import org.apache.calcite.tools.RelRunner;
 
 public class Processor {
 
-    private CalciteConnection calciteConnection;
+    private final CalciteConnection calciteConnection;
 
     private static Processor INSTANCE;
 
@@ -27,7 +27,7 @@ public class Processor {
         return INSTANCE;
     }
 
-    public void setSchema(CalciteSchema schema) {
+    public void setSchema(CalciteSchema schema) throws SQLException, ClassNotFoundException {
         SchemaPlus rootSchema = this.calciteConnection.getRootSchema();
         for (String tableName : schema.getTableNames()) {
             Table table = schema.getTable(tableName, true).getTable();
