@@ -18,6 +18,7 @@ public class CustomEnumerable extends AbstractEnumerable<Object[]> {
         this.fields = fields;
     }
     
+    @SuppressWarnings("unchecked")
     @Override
     public Enumerator<Object[]> enumerator() {
         try {

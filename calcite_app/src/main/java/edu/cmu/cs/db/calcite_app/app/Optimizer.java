@@ -27,6 +27,7 @@ import org.apache.calcite.prepare.Prepare.CatalogReader;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.rel2sql.RelToSqlConverter;
 import org.apache.calcite.rel.rules.CoreRules;
+import org.apache.calcite.rel.rules.FilterFlattenCorrelatedConditionRule;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
@@ -97,7 +98,9 @@ public class Optimizer {
     public EnumerableRel optimize(RelNode relNode) {
         RelOptPlanner planner = this.cluster.getPlanner();
         planner.addRule(FilterDistributiveRule.Config.DEFAULT.toRule());
+        planner.addRule(FilterFlattenCorrelatedConditionRule.Config.DEFAULT.toRule());
         planner.addRule(CoreRules.FILTER_INTO_JOIN);
+        planner.addRule(CoreRules.FILTER_CORRELATE);
         planner.addRule(CoreRules.FILTER_REDUCE_EXPRESSIONS);
         planner.addRule(CoreRules.AGGREGATE_EXPAND_DISTINCT_AGGREGATES);
         planner.addRule(CoreRules.AGGREGATE_REDUCE_FUNCTIONS);
@@ -163,6 +166,7 @@ public class Optimizer {
                 SqlToRelConverter.config()
                         .withTrimUnusedFields(true)
                         .withExpand(true)
+                        .withDecorrelationEnabled(true)
         );
 
         RelNode relNode = sql2rel.convertQuery(validatedSqlNode, false, true).rel;

@@ -88,12 +88,11 @@ public class App {
 
         SqlString optimizedSql = optimizer.relNodeToSqlString(optimizedSqlNode);
         SerializeSql(optimizedSql.toString(), new File(initialOutputFileName + "_optimized.sql"));
+
         System.out.println(RelOptUtil.dumpPlan("", optimizedSqlNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
 
         Processor processor = Processor.getInstance();
-
         processor.setSchema(optimizer.getSchema());
-
         try {
             ResultSet resultSet = processor.execute(optimizedSqlNode);
             SerializeResultSet(resultSet, new File(initialOutputFileName + "_result.csv"));
