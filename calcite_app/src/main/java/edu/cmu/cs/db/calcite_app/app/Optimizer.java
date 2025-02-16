@@ -27,6 +27,7 @@ import org.apache.calcite.prepare.Prepare.CatalogReader;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.rel2sql.RelToSqlConverter;
 import org.apache.calcite.rel.rules.CoreRules;
+import org.apache.calcite.rel.rules.DateRangeRules;
 import org.apache.calcite.rel.rules.FilterFlattenCorrelatedConditionRule;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
@@ -41,8 +42,11 @@ import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.util.SqlString;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
+import org.apache.calcite.sql2rel.RelDecorrelator;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
 import org.apache.calcite.sql2rel.StandardConvertletTable;
+import org.apache.calcite.tools.Frameworks;
+import org.apache.calcite.tools.RelBuilder;
 
 import edu.cmu.cs.db.calcite_app.app.rules.FilterDistributiveRule;
 
@@ -98,14 +102,41 @@ public class Optimizer {
         // Initialize planner and cluster
         RelOptPlanner planner = new VolcanoPlanner();
         planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
-        planner.addRule(FilterDistributiveRule.Config.DEFAULT.toRule());
-        planner.addRule(FilterFlattenCorrelatedConditionRule.Config.DEFAULT.toRule());
+
+        // Project
+
+        // Filter
         planner.addRule(CoreRules.FILTER_INTO_JOIN);
         planner.addRule(CoreRules.FILTER_CORRELATE);
-        planner.addRule(CoreRules.FILTER_PROJECT_TRANSPOSE);
+        planner.addRule(CoreRules.FILTER_AGGREGATE_TRANSPOSE);
         planner.addRule(CoreRules.FILTER_REDUCE_EXPRESSIONS);
+        planner.addRule(CoreRules.FILTER_PROJECT_TRANSPOSE);
+        planner.addRule(FilterDistributiveRule.Config.DEFAULT.toRule());
+        planner.addRule(FilterFlattenCorrelatedConditionRule.Config.DEFAULT.toRule());
+
+        // Calc
+        planner.addRule(CoreRules.FILTER_TO_CALC);
+        planner.addRule(CoreRules.PROJECT_TO_CALC);
+        planner.addRule(CoreRules.FILTER_CALC_MERGE);
+        planner.addRule(CoreRules.PROJECT_CALC_MERGE);
+        planner.addRule(CoreRules.CALC_MERGE);
+        planner.addRule(CoreRules.CALC_REDUCE_EXPRESSIONS);
+        planner.addRule(CoreRules.CALC_REDUCE_DECIMALS);
+        planner.addRule(CoreRules.CALC_REMOVE);
+        planner.addRule(CoreRules.CALC_SPLIT);
+
+        // Aggregate
         planner.addRule(CoreRules.AGGREGATE_EXPAND_DISTINCT_AGGREGATES);
+        planner.addRule(CoreRules.AGGREGATE_PROJECT_MERGE);
         planner.addRule(CoreRules.AGGREGATE_REDUCE_FUNCTIONS);
+
+        // Sort
+        planner.addRule(CoreRules.SORT_PROJECT_TRANSPOSE);
+
+        // Date Range
+        planner.addRule(DateRangeRules.FILTER_INSTANCE);
+
+        // Enumerable
         planner.addRule(EnumerableRules.ENUMERABLE_JOIN_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_SORT_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_LIMIT_SORT_RULE);
@@ -115,21 +146,21 @@ public class Optimizer {
         planner.addRule(EnumerableRules.ENUMERABLE_TABLE_SCAN_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_AGGREGATE_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_CORRELATE_RULE);
-
+        
         this.cluster = RelOptCluster.create(planner, new RexBuilder(this.typeFactory));
 
         this.isInitialized = true;
     }
 
     public EnumerableRel optimize(RelNode relNode) {
+        // Decorrelate the query
+        final RelBuilder relBuilder = RelBuilder.create(Frameworks.newConfigBuilder().build());
+        RelNode unnestedRelNode = RelDecorrelator.decorrelateQuery(relNode, relBuilder);
+
         RelOptPlanner planner = this.cluster.getPlanner();
-
-        RelNode newRoot = planner.changeTraits(relNode, relNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
+        RelNode newRoot = planner.changeTraits(unnestedRelNode, unnestedRelNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
         planner.setRoot(newRoot);
-
-        EnumerableRel optimizedNode = (EnumerableRel) planner.findBestExp();
-
-        return optimizedNode;
+        return (EnumerableRel) planner.findBestExp();
     }
 
     public RelNode parseAndValidate(String baseSql) throws SqlParseException {
@@ -138,7 +169,6 @@ public class Optimizer {
         configProperties.put(CalciteConnectionProperty.CASE_SENSITIVE.camelName(), Boolean.TRUE.toString());
         configProperties.put(CalciteConnectionProperty.UNQUOTED_CASING.camelName(), Casing.UNCHANGED.toString());
         configProperties.put(CalciteConnectionProperty.QUOTED_CASING.camelName(), Casing.UNCHANGED.toString());
-
         CalciteConnectionConfigImpl config = new CalciteConnectionConfigImpl(configProperties);
 
         CatalogReader catalogReader = new CalciteCatalogReader(
@@ -153,6 +183,9 @@ public class Optimizer {
                 catalogReader,
                 this.typeFactory,
                 SqlValidator.Config.DEFAULT
+                    .withDefaultNullCollation(config.defaultNullCollation())
+                    .withConformance(config.conformance())
+                    .withIdentifierExpansion(true)
         );
 
         SqlParser parser = SqlParser.create(
@@ -174,9 +207,7 @@ public class Optimizer {
                 this.cluster,
                 StandardConvertletTable.INSTANCE,
                 SqlToRelConverter.config()
-                        .withTrimUnusedFields(true)
                         .withExpand(true)
-                        .withDecorrelationEnabled(true)
         );
 
         RelNode relNode = sql2rel.convertQuery(validatedSqlNode, false, true).rel;

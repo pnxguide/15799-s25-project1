@@ -16,3 +16,9 @@ java -Xmx4096m -jar build/libs/calcite_app-1.0-SNAPSHOT-all.jar \
     "../output" \
     "../input/statistics.csv" \
     "${DUCKDB_PATH}" || true;
+
+cd ..;
+
+echo 'pragma disable_optimizer;' > tmp.sql;
+cat output/${QUERY}_optimized.sql >> tmp.sql;
+time ./duckdb ./stat.db < tmp.sql;
