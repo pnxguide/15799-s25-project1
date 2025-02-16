@@ -72,7 +72,8 @@ public class App {
     }
 
     public static void process(String query, File inputFile, File outputDirectory, File duckDbFile) throws Exception {
-        String initialOutputFileName = outputDirectory.getAbsolutePath() + "/" + getFileNameWithoutExtension(inputFile);
+        String queryName = getFileNameWithoutExtension(inputFile);
+        String initialOutputFileName = outputDirectory.getAbsolutePath() + "/" + queryName;
 
         String baseSql = query;
         SerializeSql(baseSql, new File(initialOutputFileName + ".sql"));
@@ -91,15 +92,17 @@ public class App {
 
         System.out.println(RelOptUtil.dumpPlan("", optimizedSqlNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
 
-        Processor processor = Processor.getInstance();
-        processor.setSchema(optimizer.getSchema());
+        // Processor processor = Processor.getInstance();
+        // processor.setSchema(optimizer.getSchema());
 
-        try {
-            ResultSet resultSet = processor.execute(optimizedSqlNode);
-            SerializeResultSet(resultSet, new File(initialOutputFileName + "_results.csv"));
-        } catch (SQLException e) {
-            System.out.println(e);
-        }
+        // if (!queryName.equals("q21")) {
+        //     try {
+        //         ResultSet resultSet = processor.execute(optimizedSqlNode);
+        //         SerializeResultSet(resultSet, new File(initialOutputFileName + "_results.csv"));
+        //     } catch (SQLException e) {
+        //         System.out.println(e);
+        //     }
+        // }
         
         System.gc();
     }

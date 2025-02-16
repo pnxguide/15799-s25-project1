@@ -19,14 +19,12 @@ import static org.apache.calcite.jdbc.CalciteSchema.createRootSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.prepare.Prepare.CatalogReader;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.rel2sql.RelToSqlConverter;
 import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.rules.FilterFlattenCorrelatedConditionRule;
@@ -145,28 +143,33 @@ public class Optimizer {
     }
 
     public EnumerableRel optimize(RelNode relNode) {
-        final RelBuilder relBuilder = RelBuilder.create(Frameworks.newConfigBuilder().build());
-        RelNode unnestedRelNode = RelDecorrelator.decorrelateQuery(relNode, relBuilder);
-
-        // Without unnesting
-        RelMetadataQuery md = RelMetadataQuery.instance();
         RelOptPlanner planner = this.cluster.getPlanner();
-        RelNode newRoot = planner.changeTraits(relNode, relNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
-        planner.setRoot(newRoot);
-        RelNode withoutUnnesting = planner.findBestExp();
-        RelOptCost withoutUnnestingCost = md.getCumulativeCost(withoutUnnesting);
+        RelNode currentNode = relNode;
 
-        // Try unnesting
-        newRoot = planner.changeTraits(unnestedRelNode, unnestedRelNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
-        planner.setRoot(newRoot);
-        RelNode withUnnesting = planner.findBestExp();
-        RelOptCost withUnnestingCost = md.getCumulativeCost(withUnnesting);
-        
-        if (withoutUnnestingCost.getCpu() < withUnnestingCost.getCpu()) {
-            return (EnumerableRel) withoutUnnesting;
-        } else {
-            return (EnumerableRel) withUnnesting;
+        try {
+            // Work really well for capybara1 and q21
+            // Phase A1(a) - Volcano optimization
+            currentNode = planner.changeTraits(currentNode, currentNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
+            planner.setRoot(currentNode);
+            RelNode withoutUnnesting = planner.findBestExp();
+            // Phase A1(b) - Unnesting
+            final RelBuilder relBuilder = RelBuilder.create(Frameworks.newConfigBuilder().build());
+            currentNode = RelDecorrelator.decorrelateQuery(withoutUnnesting, relBuilder);
+        } catch (Exception e) {
+            // Fallback if cannot unnest after the first optimization
+            // Decorrelate first
+            // q4 got ArrayIndexOutOfBound, q20 got NullPointerException
+            // Phase A2
+            final RelBuilder relBuilder = RelBuilder.create(Frameworks.newConfigBuilder().build());
+            currentNode = RelDecorrelator.decorrelateQuery(relNode, relBuilder);
         }
+
+        // Phase B - Volcano optimization
+        currentNode = planner.changeTraits(currentNode, currentNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
+        planner.setRoot(currentNode);
+        RelNode optimizedNode = planner.findBestExp();
+
+        return (EnumerableRel) optimizedNode;
     }
 
     public RelNode parseAndValidate(String baseSql) throws SqlParseException {
