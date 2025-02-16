@@ -31,3 +31,4 @@ duckdb
 *.db
 *.tgz
 tpch/
+*.tmp
