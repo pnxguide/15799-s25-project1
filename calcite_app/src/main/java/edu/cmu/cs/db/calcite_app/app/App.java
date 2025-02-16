@@ -96,7 +96,7 @@ public class App {
 
         try {
             ResultSet resultSet = processor.execute(optimizedSqlNode);
-            SerializeResultSet(resultSet, new File(initialOutputFileName + "_result.csv"));
+            SerializeResultSet(resultSet, new File(initialOutputFileName + "_results.csv"));
         } catch (SQLException e) {
             System.out.println(e);
         }
