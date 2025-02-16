@@ -101,6 +101,7 @@ public class Optimizer {
         planner.addRule(FilterFlattenCorrelatedConditionRule.Config.DEFAULT.toRule());
         planner.addRule(CoreRules.FILTER_INTO_JOIN);
         planner.addRule(CoreRules.FILTER_CORRELATE);
+        planner.addRule(CoreRules.FILTER_PROJECT_TRANSPOSE);
         planner.addRule(CoreRules.FILTER_REDUCE_EXPRESSIONS);
         planner.addRule(CoreRules.AGGREGATE_EXPAND_DISTINCT_AGGREGATES);
         planner.addRule(CoreRules.AGGREGATE_REDUCE_FUNCTIONS);
