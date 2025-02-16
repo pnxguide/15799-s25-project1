@@ -16,6 +16,19 @@ import org.apache.calcite.sql.SqlExplainLevel;
 import org.apache.calcite.sql.util.SqlString;
 
 public class App {
+
+    public static String getFileExtension(File f) {
+        String filename = f.getName();
+        if (filename == null) {
+            return null;
+        }
+        int dotIndex = filename.lastIndexOf(".");
+        if (dotIndex >= 0) {
+            return filename.substring(dotIndex + 1);
+        }
+        return "";
+    }
+
     public static String getFileNameWithoutExtension(File file) {
         final Pattern ext = Pattern.compile("(?<=.)\\.[^.]+$");
         return ext.matcher(file.getName()).replaceAll("");
@@ -60,7 +73,7 @@ public class App {
 
     public static void process(String query, File inputFile, File outputDirectory, File statisticsFile, File duckDbFile) throws Exception {
         String initialOutputFileName = outputDirectory.getAbsolutePath() + "/" + getFileNameWithoutExtension(inputFile);
-        
+
         String baseSql = query;
         SerializeSql(baseSql, new File(initialOutputFileName + ".sql"));
 
@@ -72,7 +85,7 @@ public class App {
 
         RelNode optimizedSqlNode = optimizer.optimize(validatedSqlNode);
         SerializePlan(optimizedSqlNode, new File(initialOutputFileName + "_optimized.txt"));
-        
+
         SqlString optimizedSql = optimizer.relNodeToSqlString(optimizedSqlNode);
         SerializeSql(optimizedSql.toString(), new File(initialOutputFileName + "_optimized.sql"));
         System.out.println(RelOptUtil.dumpPlan("", optimizedSqlNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
@@ -87,6 +100,8 @@ public class App {
         } catch (SQLException e) {
             System.out.println(e);
         }
+
+        System.gc();
     }
 
     public static void main(String[] args) throws Exception {
@@ -95,11 +110,22 @@ public class App {
             return;
         }
 
-        File inputFile = new File(args[0]);
+        File queryDirectory = new File(args[0]);
         File outputDirectory = new File(args[1]);
         File statisticsFile = new File(args[2]);
         File duckDbFile = new File(args[3]);
 
-        process(Files.readString(inputFile.toPath(), Charset.defaultCharset()), inputFile, outputDirectory, statisticsFile, duckDbFile);
+        // Debug
+        if (queryDirectory.isFile()) {
+            File inputFile = queryDirectory;
+            process(Files.readString(inputFile.toPath(), Charset.defaultCharset()), inputFile, outputDirectory, statisticsFile, duckDbFile);
+        } else {
+            for (File inputFile : queryDirectory.listFiles()) {
+                if (getFileExtension(inputFile).equals("sql")) {
+                    System.out.println("Optimizing " + inputFile.getName() + "...");
+                    process(Files.readString(inputFile.toPath(), Charset.defaultCharset()), inputFile, outputDirectory, statisticsFile, duckDbFile);
+                }
+            }
+        }
     }
 }

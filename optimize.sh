@@ -40,13 +40,10 @@ cd calcite_app/
 ./gradlew shadowJar
 ./gradlew --stop
 
-for file in ../input/queries/*.sql
-do
-    java -Xmx4096m -jar build/libs/calcite_app-1.0-SNAPSHOT-all.jar \
-        "${file}" \
-        "../${OUTPUT_DIR}" \
-        "../input/statistics.csv" \
-        "${DUCKDB_PATH}" || true;
-done
+java -Xmx4096m -jar build/libs/calcite_app-1.0-SNAPSHOT-all.jar \
+    "../input/queries/" \
+    "../${OUTPUT_DIR}" \
+    "../input/statistics.csv" \
+    "${DUCKDB_PATH}" || true;
 
 cd -;

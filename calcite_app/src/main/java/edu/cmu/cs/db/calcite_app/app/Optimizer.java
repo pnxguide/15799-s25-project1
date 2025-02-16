@@ -43,6 +43,10 @@ import org.apache.calcite.sql.validate.SqlValidatorUtil;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
 import org.apache.calcite.sql2rel.StandardConvertletTable;
 
+import edu.cmu.cs.db.calcite_app.app.rules.FilterDistributiveRule;
+
+// import edu.cmu.cs.db.calcite_app.app.rules.FilterDistributiveRule;
+
 public class Optimizer {
 
     private final CalciteSchema rootSchema;
@@ -92,6 +96,7 @@ public class Optimizer {
 
     public EnumerableRel optimize(RelNode relNode) {
         RelOptPlanner planner = this.cluster.getPlanner();
+        planner.addRule(FilterDistributiveRule.Config.DEFAULT.toRule());
         planner.addRule(CoreRules.FILTER_INTO_JOIN);
         planner.addRule(CoreRules.FILTER_REDUCE_EXPRESSIONS);
         planner.addRule(CoreRules.AGGREGATE_EXPAND_DISTINCT_AGGREGATES);

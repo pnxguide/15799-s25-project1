@@ -48,6 +48,7 @@ public class Processor {
     public ResultSet execute(RelNode relNode) throws SQLException {
         RelRunner runner = this.calciteConnection.unwrap(RelRunner.class);
         PreparedStatement statement = runner.prepareStatement(relNode);
+        statement.setQueryTimeout(60);
         ResultSet resultSet = statement.executeQuery();
         return resultSet;
     }

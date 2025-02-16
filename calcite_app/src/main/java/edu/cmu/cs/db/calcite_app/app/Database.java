@@ -50,6 +50,10 @@ public class Database {
             Connection connection = DriverManager.getConnection("jdbc:duckdb:" + duckDbFile.getPath());
             
             for (String tableName : tableNames) {
+                if (tables.containsKey(tableName)) {
+                    continue;
+                }
+
                 List<Object[]> enumerableList = new ArrayList<>();
                 List<RelDataTypeField> fields = schema.getTable(tableName).getRowType(new JavaTypeFactoryImpl()).getFieldList();
 
