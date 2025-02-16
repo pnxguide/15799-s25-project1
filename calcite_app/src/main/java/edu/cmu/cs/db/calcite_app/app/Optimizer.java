@@ -28,6 +28,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.rel2sql.RelToSqlConverter;
 import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.rules.FilterFlattenCorrelatedConditionRule;
+import org.apache.calcite.rel.rules.PruneEmptyRules;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
@@ -125,6 +126,15 @@ public class Optimizer {
 
         // Sort
         planner.addRule(CoreRules.SORT_PROJECT_TRANSPOSE);
+        planner.addRule(CoreRules.SORT_REMOVE_REDUNDANT);
+
+        // Prune
+        planner.addRule(PruneEmptyRules.AGGREGATE_INSTANCE);
+        planner.addRule(PruneEmptyRules.EMPTY_TABLE_INSTANCE);
+        planner.addRule(PruneEmptyRules.SORT_INSTANCE);
+        planner.addRule(PruneEmptyRules.SORT_FETCH_ZERO_INSTANCE);
+        planner.addRule(PruneEmptyRules.PROJECT_INSTANCE);
+        planner.addRule(PruneEmptyRules.FILTER_INSTANCE);
 
         // Enumerable
         planner.addRule(EnumerableRules.ENUMERABLE_JOIN_RULE);
@@ -156,10 +166,10 @@ public class Optimizer {
             final RelBuilder relBuilder = RelBuilder.create(Frameworks.newConfigBuilder().build());
             currentNode = RelDecorrelator.decorrelateQuery(withoutUnnesting, relBuilder);
         } catch (Exception e) {
-            // Fallback if cannot unnest after the first optimization
-            // Decorrelate first
+            // Fallback if cannot unnest after the first Volcano optimization (due to error)
             // q4 got ArrayIndexOutOfBound, q20 got NullPointerException
-            // Phase A2
+
+            // Phase A2 - Decorrelate first
             final RelBuilder relBuilder = RelBuilder.create(Frameworks.newConfigBuilder().build());
             currentNode = RelDecorrelator.decorrelateQuery(relNode, relBuilder);
         }

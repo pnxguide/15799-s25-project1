@@ -14,6 +14,4 @@ public class TableStatistic implements Statistic {
     public Double getRowCount() {
         return (double) rowCount;
     }
-    
-    // Other methods no-op
 }

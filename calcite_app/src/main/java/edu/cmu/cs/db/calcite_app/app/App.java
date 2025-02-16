@@ -92,17 +92,15 @@ public class App {
 
         System.out.println(RelOptUtil.dumpPlan("", optimizedSqlNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
 
-        // Processor processor = Processor.getInstance();
-        // processor.setSchema(optimizer.getSchema());
+        Processor processor = Processor.getInstance();
+        processor.setSchema(optimizer.getSchema());
 
-        // if (!queryName.equals("q21")) {
-        //     try {
-        //         ResultSet resultSet = processor.execute(optimizedSqlNode);
-        //         SerializeResultSet(resultSet, new File(initialOutputFileName + "_results.csv"));
-        //     } catch (SQLException e) {
-        //         System.out.println(e);
-        //     }
-        // }
+        try {
+            ResultSet resultSet = processor.execute(optimizedSqlNode);
+            SerializeResultSet(resultSet, new File(initialOutputFileName + "_results.csv"));
+        } catch (SQLException e) {
+            System.out.println(e);
+        }
         
         System.gc();
     }

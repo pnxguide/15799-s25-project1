@@ -15,10 +15,12 @@ import java.util.Set;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Schema;
+import org.apache.calcite.util.ImmutableBitSet;
 
 public class Database {
 
     private Map<String, List<Object[]>> tables;
+    private Map<String, List<ImmutableBitSet>> tableKeys;
     private boolean isRead;
 
     private static Database INSTANCE;
@@ -37,6 +39,10 @@ public class Database {
 
     public List<Object[]> getTable(String tableName) {
         return this.tables.get(tableName);
+    }
+
+    public List<ImmutableBitSet> getTableKey(String tableName) {
+        return this.tableKeys.get(tableName);
     }
 
     public void loadData(Schema schema, File duckDbFile) throws SQLException {
