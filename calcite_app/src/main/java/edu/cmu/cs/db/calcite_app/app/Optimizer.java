@@ -53,6 +53,7 @@ public class Optimizer {
     private final CalciteSchema rootSchema;
     private final RelDataTypeFactory typeFactory;
     private RelOptCluster cluster;
+    private boolean isInitialized;
 
     private static Optimizer INSTANCE;
     private static final RelOptTable.ViewExpander NOOP_EXPANDER = (type, query, schema, path) -> null;
@@ -69,11 +70,16 @@ public class Optimizer {
     }
 
     private Optimizer() throws SQLException, ClassNotFoundException {
+        this.isInitialized = false;
         this.rootSchema = createRootSchema(false);
         this.typeFactory = new JavaTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
     }
 
     public void initialize(File duckDbFile) throws SQLException, ClassNotFoundException {
+        if (this.isInitialized) {
+            return;
+        }
+
         // Discovering schema
         DataSource jdbcDataSource = JdbcSchema.dataSource(
                 "jdbc:duckdb:" + duckDbFile.getPath(), "org.duckdb.DuckDBDriver", null, null);
@@ -92,11 +98,6 @@ public class Optimizer {
         // Initialize planner and cluster
         RelOptPlanner planner = new VolcanoPlanner();
         planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
-        this.cluster = RelOptCluster.create(planner, new RexBuilder(this.typeFactory));
-    }
-
-    public EnumerableRel optimize(RelNode relNode) {
-        RelOptPlanner planner = this.cluster.getPlanner();
         planner.addRule(FilterDistributiveRule.Config.DEFAULT.toRule());
         planner.addRule(FilterFlattenCorrelatedConditionRule.Config.DEFAULT.toRule());
         planner.addRule(CoreRules.FILTER_INTO_JOIN);
@@ -114,6 +115,14 @@ public class Optimizer {
         planner.addRule(EnumerableRules.ENUMERABLE_TABLE_SCAN_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_AGGREGATE_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_CORRELATE_RULE);
+
+        this.cluster = RelOptCluster.create(planner, new RexBuilder(this.typeFactory));
+
+        this.isInitialized = true;
+    }
+
+    public EnumerableRel optimize(RelNode relNode) {
+        RelOptPlanner planner = this.cluster.getPlanner();
 
         RelNode newRoot = planner.changeTraits(relNode, relNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
         planner.setRoot(newRoot);

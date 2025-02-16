@@ -19,6 +19,7 @@ import org.apache.calcite.schema.Schema;
 public class Database {
 
     private Map<String, List<Object[]>> tables;
+    private boolean isRead;
 
     private static Database INSTANCE;
 
@@ -31,6 +32,7 @@ public class Database {
 
     private Database() {
         this.tables = new LinkedHashMap<>();
+        this.isRead = false;
     }
 
     public List<Object[]> getTable(String tableName) {
@@ -38,6 +40,10 @@ public class Database {
     }
 
     public void loadData(Schema schema, File duckDbFile) throws SQLException {
+        if (isRead) {
+            return;
+        }
+
         Set<String> tableNames = schema.getTableNames();
 
         try {
@@ -47,35 +53,39 @@ public class Database {
         }
 
         try {
-            Connection connection = DriverManager.getConnection("jdbc:duckdb:" + duckDbFile.getPath());
-            
-            for (String tableName : tableNames) {
-                if (tables.containsKey(tableName)) {
-                    continue;
-                }
-
-                List<Object[]> enumerableList = new ArrayList<>();
-                List<RelDataTypeField> fields = schema.getTable(tableName).getRowType(new JavaTypeFactoryImpl()).getFieldList();
-
-                try (Statement statement = connection.createStatement()) {
-                    ResultSet resultSet = statement.executeQuery("SELECT * FROM " + tableName);
-                    while (resultSet.next()) {
-                        Object[] row = new Object[fields.size()];
-                        for (int i = 0; i < row.length; i++) {
-                            String fieldName = fields.get(i).getName();
-                            row[i] = resultSet.getObject(fieldName);
-                        }
-                        enumerableList.add(row);
+            try (Connection connection = DriverManager.getConnection("jdbc:duckdb:" + duckDbFile.getPath())) {
+                for (String tableName : tableNames) {
+                    if (tables.containsKey(tableName)) {
+                        continue;
                     }
+                    
+                    List<Object[]> enumerableList = new ArrayList<>();
+                    List<RelDataTypeField> fields = schema.getTable(tableName).getRowType(new JavaTypeFactoryImpl()).getFieldList();
+                    
+                    try (Statement statement = connection.createStatement()) {
+                        ResultSet resultSet = statement.executeQuery("SELECT * FROM " + tableName);
+                        while (resultSet.next()) {
+                            Object[] row = new Object[fields.size()];
+                            for (int i = 0; i < row.length; i++) {
+                                String fieldName = fields.get(i).getName();
+                                row[i] = resultSet.getObject(fieldName);
+                            }
+                            enumerableList.add(row);
+                        }
+                    }
+                    
+                    this.tables.put(tableName, enumerableList);
+                    System.out.println("Table " + tableName + " has been scanned!");
+                    
+                    System.gc();
                 }
-
-                this.tables.put(tableName, enumerableList);
-                System.out.println("Table " + tableName + " has been scanned!");
-
-                System.gc();
             }
         } catch (SQLException e) {
             System.out.println(e);
         }
+
+        this.isRead = true;
+
+        System.gc();
     }
 }
