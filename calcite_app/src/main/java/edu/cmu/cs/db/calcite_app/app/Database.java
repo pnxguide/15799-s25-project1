@@ -69,10 +69,8 @@ public class Database {
                             for (int i = 0; i < row.length; i++) {
                                 String fieldName = fields.get(i).getName();
                                 row[i] = resultSet.getObject(fieldName);
-                                // System.out.println(tableName + "." + fieldName + ": " + fields.get(i).getType().getSqlTypeName());
                             }
                             enumerableList.add(row);
-                            // break;
                         }
                     }
                     

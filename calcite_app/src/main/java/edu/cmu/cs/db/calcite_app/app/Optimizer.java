@@ -19,15 +19,16 @@ import static org.apache.calcite.jdbc.CalciteSchema.createRootSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.prepare.Prepare.CatalogReader;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.rel2sql.RelToSqlConverter;
 import org.apache.calcite.rel.rules.CoreRules;
-import org.apache.calcite.rel.rules.DateRangeRules;
 import org.apache.calcite.rel.rules.FilterFlattenCorrelatedConditionRule;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
@@ -49,8 +50,6 @@ import org.apache.calcite.tools.Frameworks;
 import org.apache.calcite.tools.RelBuilder;
 
 import edu.cmu.cs.db.calcite_app.app.rules.FilterDistributiveRule;
-
-// import edu.cmu.cs.db.calcite_app.app.rules.FilterDistributiveRule;
 
 public class Optimizer {
 
@@ -103,8 +102,6 @@ public class Optimizer {
         RelOptPlanner planner = new VolcanoPlanner();
         planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
 
-        // Project
-
         // Filter
         planner.addRule(CoreRules.FILTER_INTO_JOIN);
         planner.addRule(CoreRules.FILTER_CORRELATE);
@@ -120,8 +117,6 @@ public class Optimizer {
         planner.addRule(CoreRules.FILTER_CALC_MERGE);
         planner.addRule(CoreRules.PROJECT_CALC_MERGE);
         planner.addRule(CoreRules.CALC_MERGE);
-        planner.addRule(CoreRules.CALC_REDUCE_EXPRESSIONS);
-        planner.addRule(CoreRules.CALC_REDUCE_DECIMALS);
         planner.addRule(CoreRules.CALC_REMOVE);
         planner.addRule(CoreRules.CALC_SPLIT);
 
@@ -132,9 +127,6 @@ public class Optimizer {
 
         // Sort
         planner.addRule(CoreRules.SORT_PROJECT_TRANSPOSE);
-
-        // Date Range
-        planner.addRule(DateRangeRules.FILTER_INSTANCE);
 
         // Enumerable
         planner.addRule(EnumerableRules.ENUMERABLE_JOIN_RULE);
@@ -153,14 +145,28 @@ public class Optimizer {
     }
 
     public EnumerableRel optimize(RelNode relNode) {
-        // Decorrelate the query
         final RelBuilder relBuilder = RelBuilder.create(Frameworks.newConfigBuilder().build());
         RelNode unnestedRelNode = RelDecorrelator.decorrelateQuery(relNode, relBuilder);
 
+        // Without unnesting
+        RelMetadataQuery md = RelMetadataQuery.instance();
         RelOptPlanner planner = this.cluster.getPlanner();
-        RelNode newRoot = planner.changeTraits(unnestedRelNode, unnestedRelNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
+        RelNode newRoot = planner.changeTraits(relNode, relNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
         planner.setRoot(newRoot);
-        return (EnumerableRel) planner.findBestExp();
+        RelNode withoutUnnesting = planner.findBestExp();
+        RelOptCost withoutUnnestingCost = md.getCumulativeCost(withoutUnnesting);
+
+        // Try unnesting
+        newRoot = planner.changeTraits(unnestedRelNode, unnestedRelNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
+        planner.setRoot(newRoot);
+        RelNode withUnnesting = planner.findBestExp();
+        RelOptCost withUnnestingCost = md.getCumulativeCost(withUnnesting);
+        
+        if (withoutUnnestingCost.getCpu() < withUnnestingCost.getCpu()) {
+            return (EnumerableRel) withoutUnnesting;
+        } else {
+            return (EnumerableRel) withUnnesting;
+        }
     }
 
     public RelNode parseAndValidate(String baseSql) throws SqlParseException {

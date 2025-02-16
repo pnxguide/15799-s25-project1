@@ -71,7 +71,7 @@ public class App {
         Files.writeString(outputPath.toPath(), resultSetString.toString());
     }
 
-    public static void process(String query, File inputFile, File outputDirectory, File statisticsFile, File duckDbFile) throws Exception {
+    public static void process(String query, File inputFile, File outputDirectory, File duckDbFile) throws Exception {
         String initialOutputFileName = outputDirectory.getAbsolutePath() + "/" + getFileNameWithoutExtension(inputFile);
 
         String baseSql = query;
@@ -93,36 +93,36 @@ public class App {
 
         Processor processor = Processor.getInstance();
         processor.setSchema(optimizer.getSchema());
+
         try {
             ResultSet resultSet = processor.execute(optimizedSqlNode);
             SerializeResultSet(resultSet, new File(initialOutputFileName + "_result.csv"));
         } catch (SQLException e) {
             System.out.println(e);
         }
-
+        
         System.gc();
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 4) {
+        if (args.length != 3) {
             System.out.println("Usage: java -jar App.jar <input_file> <output_dir> <statistics_file>");
             return;
         }
 
         File queryDirectory = new File(args[0]);
         File outputDirectory = new File(args[1]);
-        File statisticsFile = new File(args[2]);
-        File duckDbFile = new File(args[3]);
+        File duckDbFile = new File(args[2]);
 
         // Debug
         if (queryDirectory.isFile()) {
             File inputFile = queryDirectory;
-            process(Files.readString(inputFile.toPath(), Charset.defaultCharset()), inputFile, outputDirectory, statisticsFile, duckDbFile);
+            process(Files.readString(inputFile.toPath(), Charset.defaultCharset()), inputFile, outputDirectory, duckDbFile);
         } else {
             for (File inputFile : queryDirectory.listFiles()) {
                 if (getFileExtension(inputFile).equals("sql")) {
                     System.out.println("Optimizing " + inputFile.getName() + "...");
-                    process(Files.readString(inputFile.toPath(), Charset.defaultCharset()), inputFile, outputDirectory, statisticsFile, duckDbFile);
+                    process(Files.readString(inputFile.toPath(), Charset.defaultCharset()), inputFile, outputDirectory, duckDbFile);
                 }
             }
         }

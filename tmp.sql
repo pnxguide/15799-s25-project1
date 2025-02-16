@@ -1,14 +1,21 @@
 pragma disable_optimizer;
-SELECT SUBSTRING("t"."c_phone", 1, 2) AS "cntrycode", COUNT(*) AS "numcust", COALESCE(SUM("t"."c_acctbal"), 0) AS "totacctbal"
+SELECT "$cor2"."s_name", COUNT(*) AS "numwait"
 FROM (SELECT *
-FROM "customer"
-WHERE CAST(SUBSTRING("c_phone", 1, 2) AS VARCHAR(2)) IN ('11', '17', '20', '25', '30', '31', '33')) AS "t"
-INNER JOIN (SELECT CAST(CAST(CASE WHEN COUNT(*) = 0 THEN NULL ELSE COALESCE(SUM("c_acctbal"), 0) END AS DECIMAL(15, 2)) / COUNT(*) AS DECIMAL(15, 2)) AS "EXPR$0"
-FROM "customer"
-WHERE "c_acctbal" > 0.00 AND CAST(SUBSTRING("c_phone", 1, 2) AS VARCHAR(2)) IN ('11', '17', '20', '25', '30', '31', '33')) AS "t2" ON "t"."c_acctbal" > "t2"."EXPR$0"
-LEFT JOIN (SELECT "o_custkey", BOOL_AND(TRUE) AS "$f1"
+FROM ("supplier" INNER JOIN (SELECT *
+FROM "lineitem"
+WHERE "l_receiptdate" > "l_commitdate") AS "t" ON "supplier"."s_suppkey" = "t"."l_suppkey" INNER JOIN (SELECT *
 FROM "orders"
-GROUP BY "o_custkey") AS "t4" ON "t"."c_custkey" = "t4"."o_custkey"
-WHERE "t4"."$f1" IS NULL
-GROUP BY SUBSTRING("t"."c_phone", 1, 2)
-ORDER BY 1
+WHERE "o_orderstatus" = 'F') AS "t0" ON "t"."l_orderkey" = "t0"."o_orderkey" INNER JOIN (SELECT *
+FROM "nation"
+WHERE "n_name" = 'CHINA') AS "t1" ON "supplier"."s_nationkey" = "t1"."n_nationkey") AS "$cor0",
+LATERAL (SELECT BOOL_AND(TRUE) AS "$f0"
+FROM "lineitem"
+WHERE "l_orderkey" = "$cor0"."l_orderkey" AND "l_suppkey" <> "$cor0"."l_suppkey") AS "t4"
+WHERE "t4"."$f0" IS NOT NULL) AS "$cor2",
+LATERAL (SELECT BOOL_AND(TRUE) AS "$f0"
+FROM "lineitem"
+WHERE "l_orderkey" = "$cor2"."l_orderkey" AND "l_suppkey" <> "$cor2"."l_suppkey" AND "l_receiptdate" > "l_commitdate") AS "t8"
+WHERE "t8"."$f0" IS NULL
+GROUP BY "$cor2"."s_name"
+ORDER BY 2 DESC, "$cor2"."s_name"
+FETCH NEXT 100 ROWS ONLY

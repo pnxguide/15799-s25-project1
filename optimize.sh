@@ -27,11 +27,6 @@ cd input;
 ../duckdb ../stat.db -c ".read ./data/load.sql";
 cd ..;
 
-# # Analyze statistics from the database
-# sudo apt -y install python3-pip;
-# pip3 install duckdb;
-# python3 compute_statistics.py > ./input/statistics.csv;
-
 DUCKDB_PATH=$(realpath stat.db);
 
 # Build and run the Calcite app.
@@ -43,7 +38,6 @@ cd calcite_app/
 java -Xmx4096m -jar build/libs/calcite_app-1.0-SNAPSHOT-all.jar \
     "../input/queries/" \
     "../${OUTPUT_DIR}" \
-    "../input/statistics.csv" \
-    "${DUCKDB_PATH}" || true;
+    "${DUCKDB_PATH}";
 
 cd -;
