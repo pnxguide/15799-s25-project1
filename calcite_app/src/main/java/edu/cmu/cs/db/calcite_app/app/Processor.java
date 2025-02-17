@@ -31,7 +31,7 @@ public class Processor {
         SchemaPlus rootSchema = this.calciteConnection.getRootSchema();
         for (String tableName : schema.getTableNames()) {
             Table table = schema.getTable(tableName, true).getTable();
-            rootSchema.add(tableName, new CustomTable(table, new TableStatistic(100), tableName));
+            rootSchema.add(tableName, table);
         }
     }
 

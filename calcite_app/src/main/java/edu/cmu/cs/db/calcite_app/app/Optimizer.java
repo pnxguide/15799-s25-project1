@@ -87,14 +87,15 @@ public class Optimizer {
                 "jdbc:duckdb:" + duckDbFile.getPath(), "org.duckdb.DuckDBDriver", null, null);
         Schema schema = JdbcSchema.create(this.rootSchema.plus(), "stat", jdbcDataSource, null, null);
 
-        // 
+        // Load data
         Database db = Database.getInstance();
         db.loadData(schema, duckDbFile);
 
-        // 
+        // Add tables and their statistics
         for (String tableName : schema.getTableNames()) {
             Table table = schema.getTable(tableName);
-            this.rootSchema.add(tableName, new CustomTable(table, new TableStatistic(db.getTable(tableName).size()), tableName));
+            this.rootSchema.add(tableName, new CustomTable(table, new TableStatistic(db.getTable(tableName).size(),
+                    db.getTableKey(tableName), db.getSortedColumns(tableName)), tableName));
         }
 
         // Initialize planner and cluster
@@ -116,6 +117,8 @@ public class Optimizer {
         planner.addRule(CoreRules.FILTER_CALC_MERGE);
         planner.addRule(CoreRules.PROJECT_CALC_MERGE);
         planner.addRule(CoreRules.CALC_MERGE);
+        planner.addRule(CoreRules.CALC_REDUCE_DECIMALS);
+        planner.addRule(CoreRules.CALC_REDUCE_EXPRESSIONS);
         planner.addRule(CoreRules.CALC_REMOVE);
         planner.addRule(CoreRules.CALC_SPLIT);
 
@@ -127,6 +130,11 @@ public class Optimizer {
         // Sort
         planner.addRule(CoreRules.SORT_PROJECT_TRANSPOSE);
         planner.addRule(CoreRules.SORT_REMOVE_REDUNDANT);
+
+        // Join
+        planner.addRule(CoreRules.JOIN_COMMUTE);
+        planner.addRule(CoreRules.JOIN_COMMUTE_OUTER);
+        planner.addRule(CoreRules.JOIN_ASSOCIATE);
 
         // Prune
         planner.addRule(PruneEmptyRules.AGGREGATE_INSTANCE);
@@ -146,7 +154,7 @@ public class Optimizer {
         planner.addRule(EnumerableRules.ENUMERABLE_TABLE_SCAN_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_AGGREGATE_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_CORRELATE_RULE);
-        
+
         this.cluster = RelOptCluster.create(planner, new RexBuilder(this.typeFactory));
 
         this.isInitialized = true;
@@ -159,7 +167,8 @@ public class Optimizer {
         try {
             // Work really well for capybara1 and q21
             // Phase A1(a) - Volcano optimization
-            currentNode = planner.changeTraits(currentNode, currentNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
+            currentNode = planner.changeTraits(currentNode,
+                    currentNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
             planner.setRoot(currentNode);
             RelNode withoutUnnesting = planner.findBestExp();
             // Phase A1(b) - Unnesting
@@ -175,7 +184,8 @@ public class Optimizer {
         }
 
         // Phase B - Volcano optimization
-        currentNode = planner.changeTraits(currentNode, currentNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
+        currentNode = planner.changeTraits(currentNode,
+                currentNode.getTraitSet().replace(EnumerableConvention.INSTANCE));
         planner.setRoot(currentNode);
         RelNode optimizedNode = planner.findBestExp();
 
@@ -194,18 +204,16 @@ public class Optimizer {
                 this.rootSchema,
                 Collections.singletonList("stat"),
                 this.typeFactory,
-                config
-        );
+                config);
 
         SqlValidator validator = SqlValidatorUtil.newValidator(
                 SqlStdOperatorTable.instance(),
                 catalogReader,
                 this.typeFactory,
                 SqlValidator.Config.DEFAULT
-                    .withDefaultNullCollation(config.defaultNullCollation())
-                    .withConformance(config.conformance())
-                    .withIdentifierExpansion(true)
-        );
+                        .withDefaultNullCollation(config.defaultNullCollation())
+                        .withConformance(config.conformance())
+                        .withIdentifierExpansion(true));
 
         SqlParser parser = SqlParser.create(
                 baseSql,
@@ -213,8 +221,7 @@ public class Optimizer {
                         .withCaseSensitive(config.caseSensitive())
                         .withUnquotedCasing(config.unquotedCasing())
                         .withQuotedCasing(config.quotedCasing())
-                        .withConformance(config.conformance())
-        );
+                        .withConformance(config.conformance()));
 
         SqlNode sqlNode = parser.parseStmt();
         SqlNode validatedSqlNode = validator.validate(sqlNode);
@@ -226,8 +233,7 @@ public class Optimizer {
                 this.cluster,
                 StandardConvertletTable.INSTANCE,
                 SqlToRelConverter.config()
-                        .withExpand(true)
-        );
+                        .withExpand(true));
 
         RelNode relNode = sql2rel.convertQuery(validatedSqlNode, false, true).rel;
 

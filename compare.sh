@@ -10,6 +10,8 @@ for i in {1..4}; do
     echo '.mode csv' >> tmp.sql;
     cat output/capybara${i}.sql >> tmp.sql;
     ./duckdb ./stat.db < tmp.sql > output/capybara${i}_sql_unoptimized_result;
+
+    diff output/capybara${i}_sql_optimized_result output/capybara${i}_sql_unoptimized_result > output/capybara${i}_diff;
 done
 
 for i in {1..22}; do
@@ -22,6 +24,8 @@ for i in {1..22}; do
     echo '.mode csv' >> tmp.sql;
     cat output/q${i}.sql >> tmp.sql;
     ./duckdb ./stat.db < tmp.sql > output/q${i}_sql_unoptimized_result;
+
+    diff output/q${i}_sql_optimized_result output/q${i}_sql_unoptimized_result > output/q${i}_diff;
 done
 
 # echo 'pragma disable_optimizer;' > tmp.sql;

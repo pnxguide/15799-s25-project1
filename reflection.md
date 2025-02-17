@@ -6,3 +6,5 @@
 - Multiple-Pass Optimization
   - capybara1 is not benefit much from doing decorrelation first
     - Do decorrelation after the first pass of VolcanoOptimizer
+- q2 - join transformation (commutative) and statistic are important (otherwise, expensive cross join)
+- 
