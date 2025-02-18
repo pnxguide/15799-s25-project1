@@ -21,5 +21,7 @@ cd ..;
 echo 'Running on DuckDB';
 
 echo 'pragma disable_optimizer;' > tmp.sql;
+echo '.timer on' >> tmp.sql;
+echo 'EXPLAIN ANALYZE' >> tmp.sql;
 cat output/${QUERY}_optimized.sql >> tmp.sql;
-time ./duckdb ./stat.db < tmp.sql;
+./duckdb ./stat.db < tmp.sql;

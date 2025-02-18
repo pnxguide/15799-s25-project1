@@ -87,20 +87,23 @@ public class App {
         RelNode optimizedSqlNode = optimizer.optimize(validatedSqlNode);
         SerializePlan(optimizedSqlNode, new File(initialOutputFileName + "_optimized.txt"));
 
-        SqlString optimizedSql = optimizer.relNodeToSqlString(optimizedSqlNode);
-        SerializeSql(optimizedSql.toString(), new File(initialOutputFileName + "_optimized.sql"));
+        SqlString optimizedSqlString = optimizer.relNodeToSqlString(optimizedSqlNode);
+        String optimizeSql = optimizedSqlString.toString();
+        SerializeSql(optimizeSql, new File(initialOutputFileName + "_optimized.sql"));
+        // String rewrittenOptimizedSql = optimizer.finalRewrite(optimizeSql);
+        // SerializeSql(rewrittenOptimizedSql, new File(initialOutputFileName + "_optimized.sql"));
 
-        System.out.println(RelOptUtil.dumpPlan("", optimizedSqlNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
+        System.out.println(RelOptUtil.dumpPlan("Optimized RelNode", optimizedSqlNode, SqlExplainFormat.TEXT, SqlExplainLevel.ALL_ATTRIBUTES));
 
-        Processor processor = Processor.getInstance();
-        processor.setSchema(optimizer.getSchema());
+        // Processor processor = Processor.getInstance();
+        // processor.setSchema(optimizer.getSchema());
 
-        try {
-            ResultSet resultSet = processor.execute(optimizedSqlNode);
-            SerializeResultSet(resultSet, new File(initialOutputFileName + "_results.csv"));
-        } catch (SQLException e) {
-            System.out.println(e);
-        }
+        // try {
+        //     ResultSet resultSet = processor.execute(optimizedSqlNode);
+        //     SerializeResultSet(resultSet, new File(initialOutputFileName + "_results.csv"));
+        // } catch (SQLException e) {
+        //     System.out.println(e);
+        // }
         
         System.gc();
     }

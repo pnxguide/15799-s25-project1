@@ -93,22 +93,29 @@ public class Database {
                     this.tables.put(tableName, enumerableList);
                     System.out.println("Table " + tableName + " has been scanned!");
 
+                    // List<RelFieldCollation> sorted = new ArrayList<>();                    
                     // // Find sorted columns (only numerics columns)
                     // for (int i = 0; i < fields.size(); i++) {
-                    //     System.out.println(fields.get(i).getName() + " " + fields.get(i).getType().getSqlTypeName().getName());
-                    //     // if (fields.get(i).getType().getFullTypeString())
+                    //     boolean isAscending = true;
+                    //     if (fields.get(i).getType().getSqlTypeName().getName().equals("BIGINT") || fields.get(i).getType().getSqlTypeName().getName().equals("INTEGER")) {
+                    //         long prev = ((Number)enumerableList.get(0)[i]).longValue();
+                    //         for (int j = 1; j < enumerableList.size(); j++) {
+                    //             long cur = ((Number)enumerableList.get(j)[i]).longValue();
+                    //             if (prev > cur) {
+                    //                 isAscending = false;
+                    //                 break;
+                    //             }
+                    //         }
+                    //     }
 
-                    //     // boolean isSorted = true;
-                    //     // Object prev = enumerableList.get(0)[i];
-                    //     // for (int j = 1; j < enumerableList.size(); j++) {
-                    //     //     Object cur = enumerableList.get(j)[i];
-                    //     //     if (prev.compareTo(cur)) {
-                    //     //         isSorted = false;
-                    //     //         break;
-                    //     //     }
-                    //     // }
+                    //     if (isAscending) {
+                    //         sorted.add(new RelFieldCollation(i, RelFieldCollation.Direction.ASCENDING));
+                    //     }
                     // }
-                    this.tableSortedColumns.put(tableName, null);
+                    // List<RelCollation> sortList = new ArrayList<>();
+                    // RelCollation sortCollation = RelCollationImpl.of(sorted);
+                    // sortList.add(sortCollation);
+                    // this.tableSortedColumns.put(tableName, sortList);
 
                     // // Find keys (only numeric columns)
                     // List<Integer> uniqueColumns = new ArrayList<>();
@@ -129,6 +136,8 @@ public class Database {
                     // List<ImmutableBitSet> uniqueList = new ArrayList<>();
                     // uniqueList.add(ImmutableBitSet.builder().addAll(uniqueColumns).build());
                     // this.tableKeys.put(tableName, uniqueList);
+
+                    this.tableSortedColumns.put(tableName, null);
                     this.tableKeys.put(tableName, null);
                     
                     System.gc();

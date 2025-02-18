@@ -32,3 +32,4 @@ duckdb
 *.tgz
 tpch/
 *.tmp
+tmp.sql

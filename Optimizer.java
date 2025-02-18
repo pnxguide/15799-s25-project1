@@ -95,7 +95,8 @@ public class Optimizer {
         // Add tables and their statistics
         for (String tableName : schema.getTableNames()) {
             Table table = schema.getTable(tableName);
-            this.rootSchema.add(tableName, new CustomTable(table, new TableStatistic(db.getTable(tableName).size()), tableName));
+            this.rootSchema.add(tableName, new CustomTable(table, new TableStatistic(db.getTable(tableName).size(),
+                    db.getTableKey(tableName), db.getSortedColumns(tableName)), tableName));
         }
 
         // Initialize planner and cluster
@@ -120,15 +121,16 @@ public class Optimizer {
         // planner.addRule(CoreRules.FILTER_CORRELATE);
         planner.addRule(FilterFlattenCorrelatedConditionRule.Config.DEFAULT.toRule());
 
-        // // Calc
-        // planner.addRule(CoreRules.FILTER_TO_CALC);
-        // planner.addRule(CoreRules.PROJECT_TO_CALC);
-        // planner.addRule(CoreRules.FILTER_CALC_MERGE);
-        // planner.addRule(CoreRules.PROJECT_CALC_MERGE);
-        // planner.addRule(CoreRules.CALC_MERGE);
-        // planner.addRule(CoreRules.CALC_REDUCE_EXPRESSIONS);
-        // planner.addRule(CoreRules.CALC_REMOVE);
-        // planner.addRule(CoreRules.CALC_SPLIT);
+        // Calc
+        planner.addRule(CoreRules.FILTER_TO_CALC);
+        planner.addRule(CoreRules.PROJECT_TO_CALC);
+        planner.addRule(CoreRules.FILTER_CALC_MERGE);
+        planner.addRule(CoreRules.PROJECT_CALC_MERGE);
+        planner.addRule(CoreRules.CALC_MERGE);
+        planner.addRule(CoreRules.CALC_REDUCE_DECIMALS);
+        planner.addRule(CoreRules.CALC_REDUCE_EXPRESSIONS);
+        planner.addRule(CoreRules.CALC_REMOVE);
+        planner.addRule(CoreRules.CALC_SPLIT);
 
         // Aggregate
         // q4
