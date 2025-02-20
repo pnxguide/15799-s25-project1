@@ -18,9 +18,6 @@ tar xzf "${WORKLOAD}" --directory input/
 # Feel free to add more steps here.
 rm -rf stat.db;
 
-# Replace file
-mkdir -p tpch/;
-
 # Load data into stat.db
 cd input;
 ../duckdb ../stat.db -c ".read ./data/schema.sql";

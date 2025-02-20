@@ -21,6 +21,8 @@ import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptTable;
+import org.apache.calcite.plan.hep.HepPlanner;
+import org.apache.calcite.plan.hep.HepProgram;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.prepare.Prepare.CatalogReader;
@@ -55,7 +57,7 @@ public class Optimizer {
 
     private final CalciteSchema rootSchema;
     private final RelDataTypeFactory typeFactory;
-    private RelOptCluster cluster;
+    private RelOptCluster cboCluster, rboCluster;
     private boolean isInitialized;
 
     private static Optimizer INSTANCE;
@@ -98,6 +100,18 @@ public class Optimizer {
             this.rootSchema.add(tableName, new CustomTable(table, new TableStatistic(db.getTable(tableName).size()), tableName));
         }
 
+        // Rule that must do
+        HepProgram hepProgram = HepProgram.builder()
+                // projection pushdown
+                .addRuleInstance(FilterDistributiveRule.Config.DEFAULT.toRule())
+                .addRuleInstance(CoreRules.FILTER_INTO_JOIN)
+                .addRuleInstance(CoreRules.PROJECT_JOIN_TRANSPOSE)
+                .addRuleInstance(CoreRules.PROJECT_FILTER_TRANSPOSE)
+                .addRuleInstance(CoreRules.PROJECT_CORRELATE_TRANSPOSE)
+                .build();
+        RelOptPlanner hepPlanner = new HepPlanner(hepProgram);
+        this.rboCluster = RelOptCluster.create(hepPlanner, new RexBuilder(this.typeFactory));
+
         // Initialize planner and cluster
         RelOptPlanner planner = new VolcanoPlanner();
         planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
@@ -105,10 +119,8 @@ public class Optimizer {
         // Project
         // q9
         planner.addRule(CoreRules.PROJECT_MERGE);
-
+        
         // Filter
-        // capybara1
-        planner.addRule(CoreRules.FILTER_REDUCE_EXPRESSIONS);
         // capybara3
         planner.addRule(CoreRules.FILTER_AGGREGATE_TRANSPOSE);
         planner.addRule(CoreRules.FILTER_PROJECT_TRANSPOSE);
@@ -116,19 +128,9 @@ public class Optimizer {
         planner.addRule(CoreRules.FILTER_INTO_JOIN);
         // q19
         planner.addRule(FilterDistributiveRule.Config.DEFAULT.toRule());
-        
-        // planner.addRule(CoreRules.FILTER_CORRELATE);
+        // q21
+        planner.addRule(CoreRules.FILTER_CORRELATE);
         planner.addRule(FilterFlattenCorrelatedConditionRule.Config.DEFAULT.toRule());
-
-        // // Calc
-        // planner.addRule(CoreRules.FILTER_TO_CALC);
-        // planner.addRule(CoreRules.PROJECT_TO_CALC);
-        // planner.addRule(CoreRules.FILTER_CALC_MERGE);
-        // planner.addRule(CoreRules.PROJECT_CALC_MERGE);
-        // planner.addRule(CoreRules.CALC_MERGE);
-        // planner.addRule(CoreRules.CALC_REDUCE_EXPRESSIONS);
-        // planner.addRule(CoreRules.CALC_REMOVE);
-        // planner.addRule(CoreRules.CALC_SPLIT);
 
         // Aggregate
         // q4
@@ -136,10 +138,20 @@ public class Optimizer {
         // capybara3
         planner.addRule(CoreRules.AGGREGATE_EXPAND_DISTINCT_AGGREGATES);
         planner.addRule(CoreRules.AGGREGATE_REDUCE_FUNCTIONS);
+        // q10 ?
+        planner.addRule(CoreRules.AGGREGATE_ANY_PULL_UP_CONSTANTS);
+        // q14 ?
+        // planner.addRule(CoreRules.AGGREGATE_CASE_TO_FILTER);
 
         // Sort
         planner.addRule(CoreRules.SORT_PROJECT_TRANSPOSE);
         // planner.addRule(CoreRules.SORT_REMOVE_REDUNDANT);
+
+        // Try reducing constant
+        planner.addRule(CoreRules.PROJECT_REDUCE_EXPRESSIONS);
+        // capybara1
+        planner.addRule(CoreRules.FILTER_REDUCE_EXPRESSIONS);
+        planner.addRule(CoreRules.JOIN_REDUCE_EXPRESSIONS);
 
         // Prune
         planner.addRule(PruneEmptyRules.AGGREGATE_INSTANCE);
@@ -148,6 +160,11 @@ public class Optimizer {
         planner.addRule(PruneEmptyRules.SORT_FETCH_ZERO_INSTANCE);
         planner.addRule(PruneEmptyRules.PROJECT_INSTANCE);
         planner.addRule(PruneEmptyRules.FILTER_INSTANCE);
+
+        // // Join
+        // planner.addRule(CoreRules.JOIN_COMMUTE);
+        // planner.addRule(CoreRules.JOIN_ASSOCIATE);
+        planner.addRule(CoreRules.JOIN_EXTRACT_FILTER);
 
         // Enumerable
         planner.addRule(CustomEnumerableJoinRule.DEFAULT_CONFIG.toRule());
@@ -161,13 +178,26 @@ public class Optimizer {
         planner.addRule(EnumerableRules.ENUMERABLE_AGGREGATE_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_CORRELATE_RULE);
 
-        this.cluster = RelOptCluster.create(planner, new RexBuilder(this.typeFactory));
+        this.cboCluster = RelOptCluster.create(planner, new RexBuilder(this.typeFactory));
 
         this.isInitialized = true;
     }
 
     public EnumerableRel optimize(RelNode relNode) {
-        RelNode optimizedNode = optimizeHandler(relNode, false);
+        // Go through RBO first
+        // This is to mitigate the assumption that row size is not considered in the cost model
+        RelOptPlanner planner = this.rboCluster.getPlanner();
+        RelNode rboOptimizedNode = relNode;
+        // Try to push down projection until it cannot be pushed
+        // Let's get exhausted after 100 times
+        for (int i = 0; i < 100; i++) {
+            planner.setRoot(rboOptimizedNode);
+            rboOptimizedNode = planner.findBestExp();
+        }
+        // Then, CBO
+        RelNode cboOptimizedNode = optimizeHandler(rboOptimizedNode, false);
+
+        // RelNode cboOptimizedNode = rboOptimizedNode;
 
         // // If still seeing NestedLoopJoin, try join enumeration
         // // Probably due to the cost model, join enumeration sometimes makes things worse
@@ -177,11 +207,11 @@ public class Optimizer {
         //     optimizedNode = optimizeHandler(relNode, true);
         // }
 
-        return (EnumerableRel) optimizedNode;
+        return (EnumerableRel) cboOptimizedNode;
     }
 
     public EnumerableRel optimizeHandler(RelNode relNode, boolean enumeratingJoins) {
-        RelOptPlanner planner = this.cluster.getPlanner();
+        RelOptPlanner planner = this.cboCluster.getPlanner();
         RelNode currentNode = relNode;
 
         // if (enumeratingJoins) {
@@ -260,7 +290,7 @@ public class Optimizer {
                 NOOP_EXPANDER,
                 validator,
                 catalogReader,
-                this.cluster,
+                this.cboCluster,
                 StandardConvertletTable.INSTANCE,
                 SqlToRelConverter.config()
                         .withExpand(true));
